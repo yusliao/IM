@@ -1,0 +1,321 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{0942AE47-53A5-45D0-840E-8B8A31981AFA}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>SDKClient</RootNamespace>
+    <AssemblyName>SDKClient</AssemblyName>
+    <TargetFrameworkVersion>v4.6.1</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <NuGetPackageImportStamp>
+    </NuGetPackageImportStamp>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>..\..\output\debug\</OutputPath>
+    <DefineConstants>TRACE;DEBUG;Debug,CUSTOMSERVER</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>..\..\..\output\release\</OutputPath>
+    <DefineConstants>TRACE;RELEASE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'TEST|AnyCPU'">
+    <OutputPath>..\..\output\test\</OutputPath>
+    <DefineConstants>TRACE;CHECK</DefineConstants>
+    <Optimize>false</Optimize>
+    <DebugType>pdbonly</DebugType>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
+    <DebugSymbols>true</DebugSymbols>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'HUIDU|AnyCPU'">
+    <OutputPath>..\..\output\huidu\</OutputPath>
+    <DefineConstants>TRACE;HUIDU</DefineConstants>
+    <DebugType>pdbonly</DebugType>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="AspectCore.Abstractions, Version=0.7.0.0, Culture=neutral, PublicKeyToken=2ab7daa5defcf11f, processorArchitecture=MSIL">
+      <HintPath>..\packages\AspectCore.Abstractions.0.7.0\lib\net45\AspectCore.Abstractions.dll</HintPath>
+    </Reference>
+    <Reference Include="AspectCore.Core, Version=0.7.0.0, Culture=neutral, PublicKeyToken=2ab7daa5defcf11f, processorArchitecture=MSIL">
+      <HintPath>..\packages\AspectCore.Core.0.7.0\lib\net45\AspectCore.Core.dll</HintPath>
+    </Reference>
+    <Reference Include="AspectCore.Extensions.Reflection, Version=0.7.0.0, Culture=neutral, PublicKeyToken=2ab7daa5defcf11f, processorArchitecture=MSIL">
+      <HintPath>..\packages\AspectCore.Extensions.Reflection.0.7.0\lib\net45\AspectCore.Extensions.Reflection.dll</HintPath>
+    </Reference>
+    <Reference Include="Autofac, Version=4.8.1.0, Culture=neutral, PublicKeyToken=17863af14b0044da, processorArchitecture=MSIL">
+      <HintPath>..\packages\Autofac.4.8.1\lib\net45\Autofac.dll</HintPath>
+    </Reference>
+    <Reference Include="log4net, Version=1.2.13.0, Culture=neutral, PublicKeyToken=669e0ddf0bb1aa2a, processorArchitecture=MSIL">
+      <HintPath>..\packages\log4net.2.0.3\lib\net40-full\log4net.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Extensions.DependencyInjection, Version=2.1.1.0, Culture=neutral, PublicKeyToken=adb9793829ddae60, processorArchitecture=MSIL">
+      <HintPath>..\packages\Microsoft.Extensions.DependencyInjection.2.1.1\lib\net461\Microsoft.Extensions.DependencyInjection.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Extensions.DependencyInjection.Abstractions, Version=2.1.1.0, Culture=neutral, PublicKeyToken=adb9793829ddae60, processorArchitecture=MSIL">
+      <HintPath>..\packages\Microsoft.Extensions.DependencyInjection.Abstractions.2.1.1\lib\netstandard2.0\Microsoft.Extensions.DependencyInjection.Abstractions.dll</HintPath>
+    </Reference>
+    <Reference Include="MJD.Utility, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\packages\MJD.Utility.dll</HintPath>
+    </Reference>
+    <Reference Include="Newtonsoft.Json, Version=12.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
+      <HintPath>..\packages\Newtonsoft.Json.12.0.1\lib\net45\Newtonsoft.Json.dll</HintPath>
+    </Reference>
+    <Reference Include="NLog">
+      <HintPath>..\packages\NLog.4.4.12\lib\net45\NLog.dll</HintPath>
+    </Reference>
+    <Reference Include="QRCoder, Version=1.3.2.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\QRCoder.1.3.2\lib\net40\QRCoder.dll</HintPath>
+    </Reference>
+    <Reference Include="SQLite-net, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\sqlite-net-pcl.1.4.118\lib\netstandard1.1\SQLite-net.dll</HintPath>
+    </Reference>
+    <Reference Include="SQLitePCLRaw.batteries_green, Version=1.1.10.86, Culture=neutral, PublicKeyToken=a84b7dcfb1391f7f, processorArchitecture=MSIL">
+      <HintPath>..\packages\SQLitePCLRaw.bundle_green.1.1.10\lib\net45\SQLitePCLRaw.batteries_green.dll</HintPath>
+    </Reference>
+    <Reference Include="SQLitePCLRaw.batteries_v2, Version=1.1.10.86, Culture=neutral, PublicKeyToken=8226ea5df37bcae9, processorArchitecture=MSIL">
+      <HintPath>..\packages\SQLitePCLRaw.bundle_green.1.1.10\lib\net45\SQLitePCLRaw.batteries_v2.dll</HintPath>
+    </Reference>
+    <Reference Include="SQLitePCLRaw.core, Version=1.1.10.86, Culture=neutral, PublicKeyToken=1488e028ca7ab535, processorArchitecture=MSIL">
+      <HintPath>..\packages\SQLitePCLRaw.core.1.1.10\lib\net45\SQLitePCLRaw.core.dll</HintPath>
+    </Reference>
+    <Reference Include="SQLitePCLRaw.provider.e_sqlite3, Version=1.1.10.86, Culture=neutral, PublicKeyToken=9c301db686d0bd12, processorArchitecture=MSIL">
+      <HintPath>..\packages\SQLitePCLRaw.provider.e_sqlite3.net45.1.1.10\lib\net45\SQLitePCLRaw.provider.e_sqlite3.dll</HintPath>
+    </Reference>
+    <Reference Include="SuperSocket.Common, Version=1.6.6.1, Culture=neutral, PublicKeyToken=6c80000676988ebb, processorArchitecture=MSIL">
+      <HintPath>..\packages\SuperSocket.1.6.6.1\lib\net45\SuperSocket.Common.dll</HintPath>
+    </Reference>
+    <Reference Include="SuperSocket.Facility, Version=1.6.6.1, Culture=neutral, PublicKeyToken=6c80000676988ebb, processorArchitecture=MSIL">
+      <HintPath>..\packages\SuperSocket.1.6.6.1\lib\net45\SuperSocket.Facility.dll</HintPath>
+    </Reference>
+    <Reference Include="SuperSocket.SocketBase, Version=1.6.6.1, Culture=neutral, PublicKeyToken=6c80000676988ebb, processorArchitecture=MSIL">
+      <HintPath>..\packages\SuperSocket.1.6.6.1\lib\net45\SuperSocket.SocketBase.dll</HintPath>
+    </Reference>
+    <Reference Include="System" />
+    <Reference Include="System.Collections.Immutable, Version=1.2.2.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Collections.Immutable.1.4.0\lib\netstandard2.0\System.Collections.Immutable.dll</HintPath>
+    </Reference>
+    <Reference Include="System.ComponentModel.Composition" />
+    <Reference Include="System.ComponentModel.DataAnnotations" />
+    <Reference Include="System.Configuration" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Management" />
+    <Reference Include="System.Threading.Tasks.Extensions, Version=4.1.1.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Threading.Tasks.Extensions.4.4.0\lib\netstandard2.0\System.Threading.Tasks.Extensions.dll</HintPath>
+    </Reference>
+    <Reference Include="System.ValueTuple, Version=4.0.2.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.ValueTuple.4.4.0\lib\net461\System.ValueTuple.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="System.Data.DataSetExtensions" />
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Xml" />
+    <Reference Include="UnityEngine, Version=0.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\QRCoder.1.3.2\lib\net40\UnityEngine.dll</HintPath>
+    </Reference>
+    <Reference Include="ZKWeb.System.Drawing, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\ZKWeb.System.Drawing.4.0.0\lib\net45\ZKWeb.System.Drawing.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Command\CustomOption\CSSyncMsgStatus_cmd.cs" />
+    <Compile Include="Command\CustomOption\CustomExchange_cmd.cs" />
+    <Compile Include="Controllers\BaseController.cs" />
+    <Compile Include="Controllers\MessageController.cs" />
+    <Compile Include="Controllers\OffLineMsgController.cs" />
+    <Compile Include="DB\OffLineMsgTask.cs" />
+    <Compile Include="SDKClient.cs" />
+    <Compile Include="Command\Attention\AddAttention.cs" />
+    <Compile Include="Command\CustomOption\CustomService_cmd.cs" />
+    <Compile Include="Command\Common\ErrorPackage_cmd.cs" />
+    <Compile Include="Command\FriendOption\GetFriend.cs" />
+    <Compile Include="Command\FriendOption\RequestIp_cmd.cs" />
+    <Compile Include="Command\GroupOption\SetMemberPower.cs" />
+    <Compile Include="Command\Common\HeartMsg.cs" />
+    <Compile Include="Command\Common\Logout.cs" />
+    <Compile Include="Command\Common\MessageConfirm.cs" />
+    <Compile Include="Command\QRLogin\DeviceRepeatloginNotify.cs" />
+    <Compile Include="Command\QRLogin\ForceExit.cs" />
+    <Compile Include="Command\QRLogin\GetClientID.cs" />
+    <Compile Include="Command\QRLogin\GetLoginQRCode.cs" />
+    <Compile Include="Command\QRLogin\QRCancel.cs" />
+    <Compile Include="Command\QRLogin\QRConfirm.cs" />
+    <Compile Include="Command\QRLogin\QRExpired.cs" />
+    <Compile Include="Command\QRLogin\QRScan.cs" />
+    <Compile Include="Command\Common\SyncMsgStatus.cs" />
+    <Compile Include="Command\Common\SysNotify_cmd.cs" />
+    <Compile Include="Command\UserOption\GetUserPrivacySetting.cs" />
+    <Compile Include="Command\UserOption\SetStrangerDoNotDisturb.cs" />
+    <Compile Include="DAL\DALAccount.cs" />
+    <Compile Include="DAL\DALAttentionListHelper.cs" />
+    <Compile Include="DAL\DALChatRoomConfigHelper.cs" />
+    <Compile Include="DAL\DALContactListHelper.cs" />
+    <Compile Include="DAL\DALFriendApplyListHelper.cs" />
+    <Compile Include="DAL\DALGroupOptionHelper.cs" />
+    <Compile Include="DAL\DALStrangerOptionHelper.cs" />
+    <Compile Include="DAL\DALUserInfoHelper.cs" />
+    <Compile Include="DAL\DALJoinGroupHelper.cs" />
+    <Compile Include="DAL\DALMessageHelper.cs" />
+    <Compile Include="DAL\DALSqliteHelper.cs" />
+    <Compile Include="Command\Attention\DeleteAttentionUser.cs" />
+    <Compile Include="Command\FriendOption\GetBlackList.cs" />
+    <Compile Include="Command\FriendOption\GetFriendApplyList.cs" />
+    <Compile Include="Command\FriendOption\UpdateFriendRelation.cs" />
+    <Compile Include="Command\Attention\GetAttentionList.cs" />
+    <Compile Include="Command\GroupOption\UpdateUserSetsInGroup.cs" />
+    <Compile Include="Command\Common\SearchNewFriend.cs" />
+    <Compile Include="Command\Attention\TopAttentionUser.cs" />
+    <Compile Include="Command\UserOption\UpdateUserDetail.cs" />
+    <Compile Include="DAL\DALSysNotifyHelper.cs" />
+    <Compile Include="DB\BigTxtPackageDB.cs" />
+    <Compile Include="DB\ChatRoomConfig.cs" />
+    <Compile Include="DB\ErrorPackageDB.cs" />
+    <Compile Include="DB\friendApplyList.cs" />
+    <Compile Include="DB\GroupInfo.cs" />
+    <Compile Include="DB\GroupMemberInfo.cs" />
+    <Compile Include="DB\JoinGroup.cs" />
+    <Compile Include="DB\StrangerInfo.cs" />
+    <Compile Include="DTO\CSRoomListEntity.cs" />
+    <Compile Include="DTO\EvalEntity.cs" />
+    <Compile Include="DTO\LinkEntity.cs" />
+    <Compile Include="DTO\MessageEntity.cs" />
+    <Compile Include="DTO\NoticeEntity.cs" />
+    <Compile Include="DTO\StrangerEntity.cs" />
+    <Compile Include="Model\AttentionOption.cs" />
+    <Compile Include="Model\CustomOption.cs" />
+    <Compile Include="Model\QRLoginOption.cs" />
+    <Compile Include="Model\StrangerOption.cs" />
+    <Compile Include="Model\SysNotify.cs" />
+    <Compile Include="P2P\Command\File.cs" />
+    <Compile Include="P2P\Command\Quit.cs" />
+    <Compile Include="P2P\CustomProtocolServer.cs" />
+    <Compile Include="P2P\CustomProtocolSession.cs" />
+    <Compile Include="P2P\Models.cs" />
+    <Compile Include="P2P\P2PClient.cs" />
+    <Compile Include="P2P\P2PReceiveFilter.cs" />
+    <Compile Include="P2P\P2PServer.cs" />
+    <Compile Include="Protocol\GlobalConfig.cs" />
+    <Compile Include="Protocol\ProtocolHelper.cs" />
+    <Compile Include="Command\FriendOption\AddFriend.cs" />
+    <Compile Include="Command\FriendOption\AddFriendAccepted.cs" />
+    <Compile Include="Command\GroupOption\CreateGroup.cs" />
+    <Compile Include="Command\FriendOption\DeleteFriend.cs" />
+    <Compile Include="Command\GroupOption\DismissGroup.cs" />
+    <Compile Include="Command\GroupOption\ExitGroup.cs" />
+    <Compile Include="Command\GroupOption\GetGroupMember.cs" />
+    <Compile Include="Command\GroupOption\GetGroupMemberList.cs" />
+    <Compile Include="Command\Common\GetOfflineMessageList.cs" />
+    <Compile Include="Command\UserOption\GetUser.cs" />
+    <Compile Include="Command\GroupOption\InviteJoinGroup.cs" />
+    <Compile Include="Command\GroupOption\JoinGroup.cs" />
+    <Compile Include="Command\GroupOption\JoinGroupAccepted.cs" />
+    <Compile Include="Command\Common\Login.cs" />
+    <Compile Include="Command\FriendOption\GetContactsList.cs" />
+    <Compile Include="Command\Common\Auth.cs" />
+    <Compile Include="Command\GroupOption\GetGroupList.cs" />
+    <Compile Include="Command\Common\Message.cs" />
+    <Compile Include="Command\GroupOption\UpdateGroup.cs" />
+    <Compile Include="Command\UserOption\UpdateUser.cs" />
+    <Compile Include="Command\FriendOption\UpdateFriendSet.cs" />
+    <Compile Include="Command\GroupOption\GetGroup.cs" />
+    <Compile Include="DB\ContactDB.cs" />
+    <Compile Include="DB\groupMemberList.cs" />
+    <Compile Include="DB\historyAccount.cs" />
+    <Compile Include="DB\messages.cs" />
+    <Compile Include="DB\groupList.cs" />
+    <Compile Include="DB\contactList.cs" />
+    <Compile Include="Model\Account.cs" />
+    <Compile Include="Model\FileOption.cs" />
+    <Compile Include="Model\FriendOption.cs" />
+    <Compile Include="Model\Auth.cs" />
+    <Compile Include="Model\GroupMember.cs" />
+    <Compile Include="Model\GroupOption.cs" />
+    <Compile Include="Model\UserOption.cs" />
+    <Compile Include="Model\ContactsList.cs" />
+    <Compile Include="Model\Login.cs" />
+    <Compile Include="Model\Message.cs" />
+    <Compile Include="Model\PackageInfo.cs" />
+    <Compile Include="Protocol\ProtocolBase.cs" />
+    <Compile Include="Protocol\StatusCode.cs" />
+    <Compile Include="RecvFilter2.cs" />
+    <Compile Include="Command\Common\CommandBase.cs" />
+    <Compile Include="RecvBeginEndFilter.cs" />
+    <Compile Include="RequestInfoParse.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="SDKPropertys.cs" />
+    <Compile Include="WebAPI\CustomServerModel.cs" />
+    <Compile Include="WebAPI\IMRequest.cs" />
+    <Compile Include="WebAPI\IMServiceURL.cs" />
+    <Compile Include="WebAPI\Model.cs" />
+    <Compile Include="WebAPI\CustomServerURL.cs" />
+    <Compile Include="WebAPI\WebAPICallBack.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="app.config" />
+    <None Include="packages.config">
+      <SubType>Designer</SubType>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\SuperSocket.ClientEngine-master\SuperSocket.ClientEngine.Net45.csproj">
+      <Project>{8bbfbe4a-b91a-4dcc-92d5-fb0436e2544f}</Project>
+      <Name>SuperSocket.ClientEngine.Net45</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\SuperSocket.ProtoBase-master\src\SuperSocket.ProtoBase.Net45.csproj">
+      <Project>{092dfe24-997a-41e3-9602-b5d52d3749dd}</Project>
+      <Name>SuperSocket.ProtoBase.Net45</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\ToolGood.Words-master\ToolGood.Words\ToolGood.Words.csproj">
+      <Project>{4a5ba2b0-8c34-4891-89bc-f1536ae424d1}</Project>
+      <Name>ToolGood.Words</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Util.Tools.Image\Util.Tools.ImageOptimizer.csproj">
+      <Project>{201e614b-7eac-4fad-820c-917ece8bb1c1}</Project>
+      <Name>Util.Tools.ImageOptimizer</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Util.Tools.QrCode\01-Util.Tools.QrCode.csproj">
+      <Project>{9febdfe0-1895-4621-8de5-9cd4307878ac}</Project>
+      <Name>01-Util.Tools.QrCode</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Utillog\UtilLog.csproj">
+      <Project>{FA880C96-121F-4A45-85C2-37FE03381AC9}</Project>
+      <Name>UtilLog</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Util\Util.csproj">
+      <Project>{f92b3886-a0bc-4a73-8449-73c602b66056}</Project>
+      <Name>Util</Name>
+    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup />
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <Import Project="..\packages\SQLitePCLRaw.lib.e_sqlite3.linux.1.1.10\build\net35\SQLitePCLRaw.lib.e_sqlite3.linux.targets" Condition="Exists('..\packages\SQLitePCLRaw.lib.e_sqlite3.linux.1.1.10\build\net35\SQLitePCLRaw.lib.e_sqlite3.linux.targets')" />
+  <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
+    <PropertyGroup>
+      <ErrorText>这台计算机上缺少此项目引用的 NuGet 程序包。使用“NuGet 程序包还原”可下载这些程序包。有关更多信息，请参见 http://go.microsoft.com/fwlink/?LinkID=322105。缺少的文件是 {0}。</ErrorText>
+    </PropertyGroup>
+    <Error Condition="!Exists('..\packages\SQLitePCLRaw.lib.e_sqlite3.linux.1.1.10\build\net35\SQLitePCLRaw.lib.e_sqlite3.linux.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\SQLitePCLRaw.lib.e_sqlite3.linux.1.1.10\build\net35\SQLitePCLRaw.lib.e_sqlite3.linux.targets'))" />
+    <Error Condition="!Exists('..\packages\SQLitePCLRaw.lib.e_sqlite3.osx.1.1.10\build\net35\SQLitePCLRaw.lib.e_sqlite3.osx.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\SQLitePCLRaw.lib.e_sqlite3.osx.1.1.10\build\net35\SQLitePCLRaw.lib.e_sqlite3.osx.targets'))" />
+    <Error Condition="!Exists('..\packages\SQLitePCLRaw.lib.e_sqlite3.v110_xp.1.1.10\build\net35\SQLitePCLRaw.lib.e_sqlite3.v110_xp.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\SQLitePCLRaw.lib.e_sqlite3.v110_xp.1.1.10\build\net35\SQLitePCLRaw.lib.e_sqlite3.v110_xp.targets'))" />
+  </Target>
+  <Import Project="..\packages\SQLitePCLRaw.lib.e_sqlite3.osx.1.1.10\build\net35\SQLitePCLRaw.lib.e_sqlite3.osx.targets" Condition="Exists('..\packages\SQLitePCLRaw.lib.e_sqlite3.osx.1.1.10\build\net35\SQLitePCLRaw.lib.e_sqlite3.osx.targets')" />
+  <Import Project="..\packages\SQLitePCLRaw.lib.e_sqlite3.v110_xp.1.1.10\build\net35\SQLitePCLRaw.lib.e_sqlite3.v110_xp.targets" Condition="Exists('..\packages\SQLitePCLRaw.lib.e_sqlite3.v110_xp.1.1.10\build\net35\SQLitePCLRaw.lib.e_sqlite3.v110_xp.targets')" />
+</Project>
