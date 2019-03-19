@@ -159,7 +159,7 @@ namespace SDKClient.WebAPI
             }
             catch (Exception ex)
             {
-                downloadDataCompleted?.BeginInvoke(true, null, null);
+                downloadDataCompleted?.BeginInvoke(false, null, null);
                 SDKClient.logger.Error(ex.Message);
                 SDKClient.logger.Error(ex.StackTrace);
             }

@@ -1557,13 +1557,17 @@ namespace SDKClient
                 if (totalCount % blocklen != 0)
                     totalnum += 1;
                 fs.Seek(0, SeekOrigin.Begin);
-                bool Isfaile = false;
+                SDKProperty.ErrorState errorState = ErrorState.None;
                 for (int i = 1; i < (totalnum+1); i++)
                 {
                     if (blockNum!=null&&blockNum.Contains(i))
                         continue;
                     if (cancellationToken.HasValue && cancellationToken.Value.IsCancellationRequested)
+                    {
+                        errorState = ErrorState.Cancel;
                         break;
+                    }
+                        
                     byte[] buff = new byte[blocklen];
                     int len = fs.Read(buff, 0, buff.Length);
                     if (len == blocklen)
@@ -1573,8 +1577,9 @@ namespace SDKClient
                             if(t.IsFaulted)//服务不可用
                             {
                                 //TODO:
-                               // UploadDataCompleted?.Invoke(false, md5, ErrorState.NetworkException);
-                                Isfaile = true;
+                                // UploadDataCompleted?.Invoke(false, md5, ErrorState.NetworkException);
+                                errorState = errorState== ErrorState.Cancel? errorState: ErrorState.NetworkException;
+                                
                             }
                             else
                             {
@@ -1583,7 +1588,7 @@ namespace SDKClient
                                 {
                                     if (obj.code == "-999")
                                     {
-                                        Isfaile = true;
+                                        errorState = errorState == ErrorState.Cancel ? errorState : ErrorState.NetworkException;
                                         return;
                                     }
                                     bool isOk = false;
@@ -1595,8 +1600,9 @@ namespace SDKClient
                                             break;
                                             
                                     }
-                                    Isfaile = isOk ? false : true;
-                                    
+                                    if (!isOk)
+                                        errorState = errorState == ErrorState.Cancel ? errorState : ErrorState.NetworkException;
+
                                 }
                                 else
                                 {
@@ -1615,7 +1621,7 @@ namespace SDKClient
                             if (t.IsFaulted)
                             {
                                 //TODO:
-                                Isfaile = true;
+                                errorState = errorState == ErrorState.Cancel ? errorState : ErrorState.NetworkException;
                             }
                             else
                             {
@@ -1625,7 +1631,7 @@ namespace SDKClient
 
                                     if (obj.code == "-999")
                                     {
-                                        Isfaile = true;
+                                        errorState = errorState == ErrorState.Cancel ? errorState : ErrorState.NetworkException;
                                         return;
                                     }
                                     bool isOk = false;
@@ -1637,7 +1643,8 @@ namespace SDKClient
                                             break;
 
                                     }
-                                    Isfaile = isOk ? false : true;
+                                    if (!isOk)
+                                        errorState = errorState == ErrorState.Cancel ? errorState : ErrorState.NetworkException;
 
                                 }
                                 else
@@ -1651,9 +1658,9 @@ namespace SDKClient
 
 
                 }
-                if(Isfaile)
+                if(errorState!= ErrorState.None)
                 {
-                    UploadDataCompleted?.Invoke(false, md5, ErrorState.ServerException);
+                    UploadDataCompleted?.Invoke(false, md5, errorState);
                 }
                 else
                 {
@@ -1904,7 +1911,7 @@ namespace SDKClient
                     UpdateFileState(m, (int)ResourceState.IsCompleted);
                 }
                 else
-                    UpdateFileState(m, (int)ResourceState.IsCancelled);
+                    UpdateFileState(m, (int)ResourceState.Working);
                 downloadDataCompleted?.Invoke(b);
 
             }, cancellationToken);
@@ -2426,7 +2433,7 @@ namespace SDKClient
                     groupName = groupName
                 };
             }
-            Util.Helpers.Async.Run(async () => await DAL.DALMessageHelper.SendMsgtoDB(package));
+            Util.Helpers.Async.Run(async () => await DAL.DALMessageHelper.SendFiletoDB(package));
 
             return package.id;
         }
@@ -2675,7 +2682,8 @@ namespace SDKClient
                     SendComplete?.Invoke((0, result.fileMD5, null, null, result.errorState, null));
                     if (string.IsNullOrEmpty(msgId))
                         msgId = SDKProperty.RNGId;
-                    SDKClient.Instance.SendFiletoDB(fileFullName, to, result.fileMD5, result.fileSize, type, groupName, 0, 0, "", SessionType.CommonChat, msgId);
+                    if(result.errorState!= ErrorState.Cancel)
+                        SDKClient.Instance.SendFiletoDB(fileFullName, to, result.fileMD5, result.fileSize, type, groupName, 0, 0, "", SessionType.CommonChat, msgId);
                 }
             },(f,t) =>
             {
@@ -2807,7 +2815,7 @@ namespace SDKClient
                     {
 #if !CUSTOMSERVER
 
-                        await DAL.DALResourceManifestHelper.UpdateResourceState(s, ResourceState.NoStart);
+                        await DAL.DALResourceManifestHelper.UpdateResourceState(s, ResourceState.Working);
 #endif
 
                         SendComplete?.Invoke((false, s, 0, e));

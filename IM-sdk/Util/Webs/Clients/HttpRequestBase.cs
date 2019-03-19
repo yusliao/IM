@@ -241,9 +241,6 @@ namespace Util.Webs.Clients {
            
             var name = fileName;
             _mulitpartFile = new MulitpartFile(datas, index, name, fileName, blockSize, contentType, totalSize, blockCount);
-            
-            index++;
-           
 
             return This();
         }
@@ -259,7 +256,7 @@ namespace Util.Webs.Clients {
                 {
                     SendBefore();
                     var response = await SendAsync();
-                    response.EnsureSuccessStatusCode();
+                   
                     var result = await response.Content.ReadAsStringAsync();
                     SendAfter(result, response.StatusCode, GetContentType(response));
                     return result;
