@@ -11,7 +11,7 @@ namespace SDKClient.WebAPI
         
 #if CHECK
          private const string BaseUrl = "https://checkapi.manjd.com";
-         public const string GetHistoryMessageList = "http://ltapi.kefangapp.com/mjd/Messages/GetHistoryMessageList";
+         public const string GetHistoryMessageList = "http://ltapi.xxx.com/mjd/Messages/GetHistoryMessageList";
            public const string CSKEY = "Test@2011WebService";
 #elif DEBUG
         private const string BaseUrl = "https://devapi.manjd.com";
@@ -20,11 +20,11 @@ namespace SDKClient.WebAPI
 #elif RELEASE
 
          private const string BaseUrl = "https://api.manjd.com";
-        public const string GetHistoryMessageList = "https://api.kefangapp.com/mjd/Messages/GetHistoryMessageList";
+        public const string GetHistoryMessageList = "https://api.xxx.com/mjd/Messages/GetHistoryMessageList";
          public const string CSKEY = "MJD@2017#Passport";
 #elif HUIDU
         private const string BaseUrl = "https://api.manjd.com";
-        public const string GetHistoryMessageList = "https://otapi.kefangapp.com/mjd/Messages/GetHistoryMessageList";
+        public const string GetHistoryMessageList = "https://otapi.xxx.com/mjd/Messages/GetHistoryMessageList";
         public const string CSKEY = "MJD@2017#Passport";
 
 #endif

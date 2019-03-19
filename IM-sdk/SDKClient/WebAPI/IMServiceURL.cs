@@ -14,20 +14,20 @@ namespace SDKClient.WebAPI
           private const string NoticeUrl_https = "https://192.168.4.21:8299/";
        
 #elif CHECK
-        private const string BaseUrl = "http://ltapi.kefangapp.com/webapi/";
-         private const string NoticeUrl_http = "http://ltim.kefangapp.com:18040/square/";
-        private const string NoticeUrl_https = "https://ltapi.kefangapp.com/square/";
+        private const string BaseUrl = "http://ltapi.xxx.com/webapi/";
+         private const string NoticeUrl_http = "http://ltim.xxx.com:18040/square/";
+        private const string NoticeUrl_https = "https://ltapi.xxx.com/square/";
         private const string NoticePort = "";
 #elif RELEASE
 
-        private const string BaseUrl = "https://api.kefangapp.com/webapi/";
-        private const string NoticeUrl_http = "http://im.kefangapp.com:18040/square/";
-        private const string NoticeUrl_https = "https://im.kefangapp.com:18040/square/";
+        private const string BaseUrl = "https://api.xxx.com/webapi/";
+        private const string NoticeUrl_http = "http://im.xxx.com:18040/square/";
+        private const string NoticeUrl_https = "https://im.xxx.com:18040/square/";
         private const string NoticePort = "18040";
 #elif HUIDU
-        private const string BaseUrl = "https://otapi.kefangapp.com/webapi/";
-        private const string NoticeUrl_http = "http://otim.kefangapp.com:18040/square/";
-        private const string NoticeUrl_https = "https://otim.kefangapp.com:18040/square/";
+        private const string BaseUrl = "https://otapi.xxx.com/webapi/";
+        private const string NoticeUrl_http = "http://otim.xxx.com:18040/square/";
+        private const string NoticeUrl_https = "https://otim.xxx.com:18040/square/";
         private const string NoticePort = "18040";
 #endif
         public static string GetAttentionList = BaseUrl + SDKClient.Instance.property.CurrentAccount.httpVersion + "/Contacts/GetAttentionListIncr";

@@ -36,6 +36,7 @@ namespace SDKClient.DAL
                     await SDKProperty.SQLiteConn.CreateTableAsync<DB.ChatRoomConfig>();
                     await SDKProperty.SQLiteConn.CreateTableAsync<DB.JoinGroupDB>();
                     await SDKProperty.SQLiteConn.CreateTableAsync<DB.groupMemberListDB>();
+                    await SDKProperty.SQLiteConn.CreateTableAsync<DB.ResourceManifest>();
                     await SDKProperty.SQLiteConn.CreateTableAsync<DB.GroupMemberInfo>();
                     await SDKProperty.SQLiteConn.CreateTableAsync<DB.OffLineMsgTask>();
                    

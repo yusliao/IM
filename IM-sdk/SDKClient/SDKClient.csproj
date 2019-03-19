@@ -142,7 +142,9 @@
     <Compile Include="Controllers\BaseController.cs" />
     <Compile Include="Controllers\MessageController.cs" />
     <Compile Include="Controllers\OffLineMsgController.cs" />
+    <Compile Include="DAL\DALResourceManifestHelper.cs" />
     <Compile Include="DB\OffLineMsgTask.cs" />
+    <Compile Include="DB\ResourceManifest.cs" />
     <Compile Include="SDKClient.cs" />
     <Compile Include="Command\Attention\AddAttention.cs" />
     <Compile Include="Command\CustomOption\CustomService_cmd.cs" />

@@ -11,22 +11,22 @@ namespace SDKClient.Protocol
 
 #if CHECK
         //public const string QrLoginIP = "192.168.4.22";
-        public const string QrLoginIP = "ltim.kefangapp.com";
+        public const string QrLoginIP = "ltim.xxx.com";
         public const int QrLoginPort = 18020;
 
         //public const string IMIP = "192.168.10.223 ";
-        public const string IMIP = "ltim.kefangapp.com";
+        public const string IMIP = "ltim.xxx.com";
 #if CUSTOMSERVER
         public const int IMPort = 18010;
 #else
         public const int IMPort = 18000;
 #endif
 
-        public const string BaseURL = "http://ltapi.kefangapp.com/webapi/";
-        public const string MJDBaseURL = "http://ltapi.kefangapp.com/mjd";
-        public const string BaseFileURL = "http://ltfile.kefangapp.com";
-        public const string BaseDownLoadFile = "http://ltcdn.kefangapp.com";
-        public const string ImLinkSignUri = "22222";
+        public const string BaseURL = "http://ltapi.xxx.com/webapi/";
+        public const string MJDBaseURL = "http://ltapi.xxx.com/mjd";
+        public const string BaseFileURL = "http://ltfile.xxx.com";
+        public const string BaseDownLoadFile = "http://ltcdn.xxx.com";
+        public const string ImLinkSignUri = "ffff";
         public const string LatestVersionNum = BaseFileURL + "/api/Version/GetPCVersion?versionNum=";
         public const string Grant = MJDBaseURL + "/Api/Grant";
         public static string uploadresource = BaseFileURL + "/api/"+ SDKClient.Instance.property.CurrentAccount.httpVersion+ "/FileOperator/Upload";
@@ -48,30 +48,52 @@ namespace SDKClient.Protocol
 #endif
 
         public const string BaseURL = "http://192.168.4.26/";
-        public const string ImLinkSignUri = "xxxx";
+        public const string ImLinkSignUri = "ffff";
         public const string LatestVersionNum = "http://192.168.4.24:8090/api/Version/GetPCVersion?versionNum=";
          public const string Grant = "http://192.168.4.25" + "/Api/Grant";
-        public const string uploadresource = "http://ltfile.kefangapp.com/api/FileOperator/Upload";
+        public const string uploadresource = "http://ltfile.xxx.com/api/FileOperator/Upload";
         public const string findresource = "http://192.168.4.24:8090/api/FileOperator/IsFileExist/";
         public const string downLoadResource = "http://192.168.4.24:8090/api/File/Download/";
         public const string DownloadFileWithResume = "http://192.168.4.24:8090/api/FileOperator/Download?fileCode=";
         public const string downLoadUpdateFile = "http://192.168.4.24:8090/api/Version/GetPcSubUpgradeFile";
-        
+       
 #elif HUIDU
-
+        // public const string QrLoginIP = "14.17.113.145";
+        public const int IMPort = 18000;
+        public const string QrLoginIP = "otim.xxx.com";
+        public const int QrLoginPort = 18020;
+        // public const string IMIP = "14.17.113.145";
+        public const string IMIP = "otim.xxx.com";
+        public const string BaseURL = "https://otapi.xxx.com/webapi/";
+        public const string BaseFileURL = "https://otfile.xxx.com";
+        public const string BaseDownLoadFile = "https://otcdn.xxx.com";
+        public const string ImLinkSignUri = "xxx";
+        public const string LatestVersionNum = BaseFileURL + "/api/Version/GetPCVersion?versionNum=";
+        public const string Grant = BaseURL + "Api/Grant";
+        public const string uploadresource = BaseFileURL + "/api/FileOperator/Upload";
+        public const string findresource = BaseFileURL + "/api/FileOperator/IsFileExist/";
+        public const string downLoadResource = BaseDownLoadFile + "/api/File/Download/";
+        public const string DownloadFileWithResume = BaseDownLoadFile+ "/api/FileOperator/Download?fileCode=";
+        public const string downLoadUpdateFile = BaseFileURL + "/api/Version/GetPcSubUpgradeFile";
 #elif RELEASE
-
+        public const string BaseURL = "https://api.xxx.com/webapi/";
+        public const string BaseFileURL = "https://file.xxx.com";
+        public const string MJDURL = "https://api.xxx.com/mjd";
+        public const string BaseDownLoadFile = "https://cdn.xxx.com";
+        // public const string QrLoginIP = "14.17.113.145";
+        public const string QrLoginIP = "im.xxx.com";
+        public const int QrLoginPort = 18020;
 
 
 #if CUSTOMSERVER
-        //public const string IMIP = "imint.manjinba.com";
-        public const string IMIP = "im.kefangapp.com"; 
+        //public const string IMIP = "xxx.xx.com";
+        public const string IMIP = "im.xxx.com"; 
         public const int IMPort = 18010;
 #else
-        public const string IMIP = "im.kefangapp.com";
+        public const string IMIP = "im.xxx.com";
         public const int IMPort = 18000;
 #endif
-        public const string ImLinkSignUri = "7k5bdnnzBVfWad42";
+        public const string ImLinkSignUri = "xxx";
         public const string LatestVersionNum = BaseFileURL + "/api/Version/GetPCVersion?versionNum=";
         public const string Grant = MJDURL + "/Api/Grant";
         public const string uploadresource = BaseFileURL + "/api/FileOperator/Upload";
@@ -97,8 +119,8 @@ namespace SDKClient.Protocol
         public static string GetUserPcOnlineInfo = BaseURL + SDKClient.Instance.property.CurrentAccount.httpVersion + "/User/GetUserPcOnlineInfo";
 
 
-        public static string ResumeUpload = "http://ltfile.kefangapp.com" + "/api/" + SDKClient.Instance.property.CurrentAccount.httpVersion + "/FileOperator/ResumeUploadFile";
-       //  public static string ResumeUpload = "http://192.168.10.72:8090/api/v1.4/fileoperator/ResumeUploadFile";
+        public static string ResumeUpload = "http://ltfile.xxx.com" + "/api/" + SDKClient.Instance.property.CurrentAccount.httpVersion + "/FileOperator/ResumeUploadFile";
+        // public static string ResumeUpload = "http://192.168.10.116:8089/api/v1.4/fileoperator/ResumeUploadFile";
 
 
         /// <summary>

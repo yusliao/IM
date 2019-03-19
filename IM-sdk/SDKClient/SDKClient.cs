@@ -1057,61 +1057,13 @@ namespace SDKClient
                             PackageInfo obj = Util.Helpers.Json.ToObject<PackageInfo>(item);
                             if (obj.code != 0)
                                 continue;
+                         
                             switch (obj.apiId)
                             {
-                                case ProtocolBase.AddFriendCode:
-                                    obj = Newtonsoft.Json.JsonConvert.DeserializeObject<AddFriendPackage>(item);
-
-                                    break;
-                                case ProtocolBase.AddFriendAcceptedCode:
-                                    obj = Newtonsoft.Json.JsonConvert.DeserializeObject<AddFriendAcceptedPackage>(item);
-
-                                    break;
-                                case ProtocolBase.DismissGroupCode:
-
-                                    obj = Newtonsoft.Json.JsonConvert.DeserializeObject<DismissGroupPackage>(item);
-
-
-
-                                    break;
-                                case ProtocolBase.ExitGroupCode:
-
-                                    obj = Newtonsoft.Json.JsonConvert.DeserializeObject<ExitGroupPackage>(item);
-
-
-
-                                    break;
-                                case ProtocolBase.InviteJoinGroupCode:
-
-                                    obj = Newtonsoft.Json.JsonConvert.DeserializeObject<InviteJoinGroupPackage>(item);
-
-
-
-                                    break;
-                                case ProtocolBase.JoinGroupCode:
-
-                                    obj = Newtonsoft.Json.JsonConvert.DeserializeObject<JoinGroupPackage>(item);
-
-                                    SDKClient.Instance.OnNewDataRecv(obj);
-
-                                    break;
-                                case ProtocolBase.UpdateGroupCode:
-                                    obj = Newtonsoft.Json.JsonConvert.DeserializeObject<UpdateGroupPackage>(item);
-
-
-                                    break;
-                                case ProtocolBase.JoinGroupAcceptedCode:
-
-                                    obj = Newtonsoft.Json.JsonConvert.DeserializeObject<JoinGroupAcceptedPackage>(item);
-
-
-                                    break;
                                 case ProtocolBase.DeleteFriendCode:
-                                    //if (filters.Any(m => m.msgId == obj.id))
-                                    //{
+                                   
                                     obj = Newtonsoft.Json.JsonConvert.DeserializeObject<DeleteFriendPackage>(item);
-                                    //SDKClient.Instance.OnNewDataRecv(obj);
-                                    //}
+                                   
                                     break;
                                 case ProtocolBase.UpdateFriendRelationCode:
 
@@ -1119,28 +1071,184 @@ namespace SDKClient
                                     SDKClient.Instance.OnNewDataRecv(obj);
 
                                     break;
-                                case ProtocolBase.SetMemberPowerCode:
 
+                                case Protocol.ProtocolBase.InviteJoinGroupCode:
+                                    obj = Newtonsoft.Json.JsonConvert.DeserializeObject<InviteJoinGroupPackage>(item);
+
+                                    await DAL.DALGroupOptionHelper.SendMsgtoDB(Util.Helpers.Json.ToObject<InviteJoinGroupPackage>(item));
+                                    break;
+                                case Protocol.ProtocolBase.UpdateGroupCode:
+                                    obj = Newtonsoft.Json.JsonConvert.DeserializeObject<UpdateGroupPackage>(item);
+                                    await DAL.DALGroupOptionHelper.SendMsgtoDB(Util.Helpers.Json.ToObject<UpdateGroupPackage>(item));
+                                   
+                                    break;
+                                case Protocol.ProtocolBase.JoinGroupCode:
+                                    obj = Newtonsoft.Json.JsonConvert.DeserializeObject<JoinGroupPackage>(item);
+                                    JoinGroupPackage jgp = Util.Helpers.Json.ToObject<JoinGroupPackage>(item);
+                                    if (jgp.code == 0)
+                                    {
+                                        //管理员收到入群申请
+                                        if (obj.from != SDKClient.Instance.property.CurrentAccount.userID.ToString())
+                                        {
+                                            await DAL.DALJoinGroupHelper.RecvJoinGroup(jgp);
+                                            await DAL.DALJoinGroupHelper.SendMsgtoDB(jgp);
+                                           
+                                        }
+                                        else
+                                        {
+                                            if (jgp.data.isAccepted)
+                                            {
+                                                await DAL.DALJoinGroupHelper.SendMsgtoDB(jgp);
+                                                await DAL.DALJoinGroupHelper.DeleteJoinGroupItem(jgp);
+                                            }
+                                        }
+                                    }
+                                    else if (jgp.code == (int)Protocol.StatusCode.UserIsGroupMember || jgp.code == (int)Protocol.StatusCode.AlreadyCompleted)
+                                    {
+
+                                        await DAL.DALJoinGroupHelper.DeleteJoinGroupItem(jgp);
+                                    }
+
+                                    break;
+                                case Protocol.ProtocolBase.AddFriendCode:
+                                    obj = Newtonsoft.Json.JsonConvert.DeserializeObject<AddFriendPackage>(item);
+                                    await DAL.DALFriendApplyListHelper.InsertOrUpdateItem(Util.Helpers.Json.ToObject<AddFriendPackage>(item));
+                                    SDKClient.Instance.property.FriendApplyList = Util.Helpers.Async.Run(async () => await DAL.DALFriendApplyListHelper.GetFriendApplyList());
+                                    break;
+                                case Protocol.ProtocolBase.AddFriendAcceptedCode:
+                                    obj = Newtonsoft.Json.JsonConvert.DeserializeObject<AddFriendAcceptedPackage>(item);
+                                    AddFriendAcceptedPackage afap = Util.Helpers.Json.ToObject<AddFriendAcceptedPackage>(item);
+                                    //接收加好友
+                                    if (afap.code == 0 || obj.code == (int)Protocol.StatusCode.AlreadyBecomeFriend)
+                                    {
+                                        await DAL.DALContactListHelper.DeleteCurrentContactListPackage();
+                                        if (afap.data.userId == SDKClient.Instance.property.CurrentAccount.userID)
+                                        {
+                                            await DAL.DALFriendApplyListHelper.UpdateItemIsChecked(afap.data.friendId);
+                                            await DAL.DALUserInfoHelper.UpdateItemIsChecked(afap.data.friendId);
+                                            var db = await DAL.DALMessageHelper.SendMsgtoDB(afap.id, afap.from, obj.to, "已经是好朋友，开始聊天吧", afap.data.friendId, afap.data.userId, SDKProperty.MessageType.notification, SDKProperty.MessageState.isRead);
+                                           
+                                            await DAL.DALMessageHelper.UpdateMsgSessionTypeToCommon(afap.data.friendId);
+                                            await DAL.DALStrangerOptionHelper.DeleteStranger(afap.data.friendId);
+                                        }
+                                        else
+                                        {
+                                            await DAL.DALFriendApplyListHelper.UpdateItemIsChecked(afap.data.userId);
+                                            await DAL.DALUserInfoHelper.UpdateItemIsChecked(afap.data.userId);
+                                            if (afap.data.type != 1)//服务器代发的同意消息，不需要添加提示
+                                            {
+                                                var db = await DAL.DALMessageHelper.SendMsgtoDB(afap.id, afap.from, afap.to, "已经是好朋友，开始聊天吧", afap.data.userId, afap.data.userId, SDKProperty.MessageType.notification, SDKProperty.MessageState.isRead);
+                                               
+                                            }
+                                            await DAL.DALMessageHelper.UpdateMsgSessionTypeToCommon(afap.data.userId);
+                                            await DAL.DALStrangerOptionHelper.DeleteStranger(afap.data.userId);
+                                        }
+
+
+                                    }
+                                    else if (afap.code == (int)Protocol.StatusCode.AuditFriendApplyError)
+                                    {
+                                        if (afap.data.userId == SDKClient.Instance.property.CurrentAccount.userID)
+                                            await DAL.DALFriendApplyListHelper.DeleteItem(afap.data.friendId);
+                                        else
+                                            await DAL.DALFriendApplyListHelper.DeleteItem(afap.data.friendId);
+                                    }
+                                    break;
+                                case Protocol.ProtocolBase.SetMemberPowerCode:
                                     obj = Newtonsoft.Json.JsonConvert.DeserializeObject<SetMemberPowerPackage>(item);
+                                    SetMemberPowerPackage smpp = Util.Helpers.Json.ToObject<SetMemberPowerPackage>(item);
+                                    await DAL.DALGroupOptionHelper.SendMsgtoDB(smpp);
+                                 
+                                    break;
+                                case Protocol.ProtocolBase.ExitGroupCode:
+                                    obj = Newtonsoft.Json.JsonConvert.DeserializeObject<ExitGroupPackage>(item);
+                                    var egp = Util.Helpers.Json.ToObject<ExitGroupPackage>(item);
+                                    if (obj.code == 0)
+                                    {
+                                        if (egp.data.userIds.Contains(SDKClient.Instance.property.CurrentAccount.userID))//自己退群
+                                        {
+                                            if (egp.data.adminId == 0)
+                                            {
+                                                //删除群的聊天记录
+                                                await DAL.DALMessageHelper.DeleteHistoryMsg(egp.data.groupId, chatType.groupChat);
+                                                await DAL.DALGroupOptionHelper.DeleteGroupListPackage();
+                                                await DAL.DALJoinGroupHelper.DeleteJoinGroupItem(egp.data.groupId);//删除该群的入群申请列表
+                                                                                                                   //  Util.Helpers.Async.Run(async () => await DAL.DALGroupOptionHelper.DeleteGroupMemberListPackage(package.data.groupId));
+                                            }
+                                            else//被T出
+                                            {
+                                                var goh_msg = await DAL.DALGroupOptionHelper.SendMsgtoDB(egp);
+                                             
+                                                await DAL.DALMessageHelper.UpdateMsgIsRead(egp.data.groupId, 1);
+                                                await DAL.DALJoinGroupHelper.DeleteJoinGroupItem(egp.data.groupId);//删除该群的入群申请列表
+                                            }
+                                        }
+                                        else
+                                        {
+                                            if (egp.data.adminIds != null && egp.data.adminIds.Contains(SDKClient.Instance.property.CurrentAccount.userID))
+                                            {
+                                                var goh_msg = await DAL.DALGroupOptionHelper.SendMsgtoDB(egp);
+                                             
+                                            }
+                                        }
+
+                                    }
 
                                     break;
-                                case ProtocolBase.SyncMsgStatusCode:
-                                    //var dataItms = package.data.items.Where(m =>
-                                    //  {
-                                    //      var info = Util.Helpers.Json.ToObject<PackageInfo>(Util.Helpers.Json.ToJson(m));
-                                    //      if (info.read == 0 && info.id == obj.id)
-                                    //          return true;
-                                    //      else
-                                    //          return false;
-                                    //  }).ToList();
-                                    //if (dataItms != null && dataItms.Count > 0)
-                                    //{
+                                case Protocol.ProtocolBase.DismissGroupCode:
+                                    obj = Newtonsoft.Json.JsonConvert.DeserializeObject<DismissGroupPackage>(item);
+                                    var dgp = Util.Helpers.Json.ToObject<DismissGroupPackage>(item);
 
-                                    //}
-                                    obj = Newtonsoft.Json.JsonConvert.DeserializeObject<SyncMsgStatusPackage>(item);
-
+                                    if (dgp.code == 0)
+                                    {
+                                        //群主本人则删除群的聊天记录
+                                        if (dgp.data.ownerId == SDKClient.Instance.property.CurrentAccount.userID)
+                                            await DAL.DALMessageHelper.DeleteHistoryMsg(dgp.data.groupId, chatType.groupChat);
+                                        await DAL.DALGroupOptionHelper.DeleteGroupListPackage();
+                                        //Util.Helpers.Async.Run(async () => await DAL.DALGroupOptionHelper.DeleteGroupMemberListPackage(package.data.groupId));
+                                        var goh_msg = await DAL.DALGroupOptionHelper.SendMsgtoDB(dgp);
+                                    
+                                        await DAL.DALJoinGroupHelper.DeleteJoinGroupItem(dgp.data.groupId);//删除该群的入群申请列表
+                                        await DAL.DALMessageHelper.UpdateMsgIsRead(dgp.data.groupId, 1);
+                                    }
                                     break;
+                                case Protocol.ProtocolBase.JoinGroupAcceptedCode:
+                                    obj = Newtonsoft.Json.JsonConvert.DeserializeObject<JoinGroupAcceptedPackage>(item);
+                                    var jgap = Util.Helpers.Json.ToObject<JoinGroupAcceptedPackage>(item);
+
+                                    if (jgap.code == 0)
+                                    {
+                                        // Task.Run(async () => await DAL.DALGroupOptionHelper.DeleteGroupMemberListPackage(package.data.groupId));
+                                        //TODO:删除群申请列表中申请记录
+                                        await DAL.DALJoinGroupHelper.DeleteJoinGroupItem(jgap as JoinGroupAcceptedPackage);
+                                        //入群通知消息入库
+                                        if (jgap.data.auditStatus == 1)
+                                        {
+                                            var jgap_msg = await DAL.DALGroupOptionHelper.SendMsgtoDB(jgap);
+                                          
+                                        }
+                                    }
+                                    else if (jgap.code == (int)Protocol.StatusCode.UserIsGroupMember || jgap.code == (int)Protocol.StatusCode.AlreadyCompleted)
+                                    {
+                                        if (!await DAL.DALJoinGroupHelper.DeleteJoinGroupItem(jgap as JoinGroupAcceptedPackage))
+                                            SDKClient.logger.Error($"删除入群申请记录失败：{item.ToString()}");
+
+                                    }
+                                    break;
+                                    //case Protocol.ProtocolBase.SyncMsgStatusCode:
+                                    //    var smsp = Util.Helpers.Json.ToObject<SyncMsgStatusPackage>(Util.Helpers.Json.ToJson(item));
+
+                                    //    if (smsp.code == 0)
+                                    //    {
+                                    //        if (smsp.data.partnerId == 0)
+                                    //            await DAL.DALMessageHelper.UpdateMsgIsRead(smsp.data.groupId, (int)SDKProperty.chatType.groupChat);
+                                    //        else
+                                    //            await DAL.DALMessageHelper.UpdateMsgIsRead(smsp.data.partnerId, (int)SDKProperty.chatType.chat);
+                                    //    }
+
+                                    //    break;
                             }
+
                             this.OnNewDataRecv(obj);
                         }
                     }
@@ -1436,33 +1544,36 @@ namespace SDKClient
                 return;
         }
         //UpLoadResource//ResumeUpload
-        public async void ResumeUpload(int offset, string resourceFullName, string md5, Action<long> UploadProgressChanged, Action<bool, string, SDKProperty.ErrorState> UploadDataCompleted,
-       System.Threading.CancellationToken? cancellationToken = null)
+        public async void ResumeUpload(string resourceFullName,string md5,Action<long> UploadProgressChanged, Action<bool, string, SDKProperty.ErrorState> UploadDataCompleted,
+           List<int> blockNum,  System.Threading.CancellationToken? cancellationToken = null)
         {
+            
             int blocklen = 1024 * 1024 * 2;
             using (FileStream fs = new FileStream(resourceFullName, FileMode.Open))
             {
-
+               
                 long totalCount = fs.Length;
                 long totalnum = totalCount / blocklen;
                 if (totalCount % blocklen != 0)
                     totalnum += 1;
                 fs.Seek(0, SeekOrigin.Begin);
                 bool Isfaile = false;
-                for (int i = 0; i < totalnum; i++)
+                for (int i = 1; i < (totalnum+1); i++)
                 {
+                    if (blockNum!=null&&blockNum.Contains(i))
+                        continue;
                     if (cancellationToken.HasValue && cancellationToken.Value.IsCancellationRequested)
                         break;
                     byte[] buff = new byte[blocklen];
                     int len = fs.Read(buff, 0, buff.Length);
                     if (len == blocklen)
                     {
-                        await WebAPICallBack.ResumeUpload(buff, ++i, blocklen, md5, totalCount, totalnum).ContinueWith(async t =>
+                        await WebAPICallBack.ResumeUpload(buff, i, blocklen, md5, totalCount, totalnum).ContinueWith(async t =>
                         {
-                            if (t.IsFaulted)//服务不可用
+                            if(t.IsFaulted)//服务不可用
                             {
                                 //TODO:
-                                // UploadDataCompleted?.Invoke(false, md5, ErrorState.NetworkException);
+                               // UploadDataCompleted?.Invoke(false, md5, ErrorState.NetworkException);
                                 Isfaile = true;
                             }
                             else
@@ -1478,14 +1589,14 @@ namespace SDKClient
                                     bool isOk = false;
                                     for (int j = 0; j < 5; j++)
                                     {
-                                        var r = await WebAPICallBack.ResumeUpload(buff, i, blocklen, md5, totalCount, totalnum);
+                                       var r = await WebAPICallBack.ResumeUpload(buff, i, blocklen, md5, totalCount, totalnum);
                                         isOk = r.Success;
                                         if (isOk)
                                             break;
-
+                                            
                                     }
                                     Isfaile = isOk ? false : true;
-
+                                    
                                 }
                                 else
                                 {
@@ -1499,7 +1610,7 @@ namespace SDKClient
                     {
                         byte[] temp = new byte[len];
                         Buffer.BlockCopy(buff, 0, temp, 0, len);
-                        await WebAPICallBack.ResumeUpload(temp, ++i, len, md5, totalCount, totalnum).ContinueWith(async t =>
+                        await WebAPICallBack.ResumeUpload(temp, i, len, md5, totalCount, totalnum).ContinueWith(async t =>
                         {
                             if (t.IsFaulted)
                             {
@@ -1540,7 +1651,7 @@ namespace SDKClient
 
 
                 }
-                if (Isfaile)
+                if(Isfaile)
                 {
                     UploadDataCompleted?.Invoke(false, md5, ErrorState.ServerException);
                 }
@@ -1556,7 +1667,7 @@ namespace SDKClient
 
         private static object obj_lock = new object();
         //DownloadFileWithResume
-        public void DownloadFileWithResume(string resourceName, string fileName, FileType fileType, Action<long> downloadProgressChanged, 
+        public void DownLoadResource(string resourceName, string fileName, FileType fileType, Action<long> downloadProgressChanged, 
             Action<bool> downloadDataCompleted, string msgId, System.Threading.CancellationToken? cancellationToken = null)
         {
             void UpdateFileState(DB.messageDB message, int fileState)
@@ -1752,7 +1863,7 @@ namespace SDKClient
         /// <param name="downloadProgressChanged"></param>
         /// <param name="downloadDataCompleted"></param>
         /// <param name="cancellationToken"></param>
-        public void DownLoadResource(string resourceName, string fileName, FileType fileType, Action<long> downloadProgressChanged,
+        public void DownloadFileWithResume(string resourceName, string fileName, FileType fileType, Action<long> downloadProgressChanged,
             Action<bool> downloadDataCompleted, string msgId, Action<long, long> InitProgress=null, System.Threading.CancellationToken? cancellationToken = null)
         {
             void UpdateFileState(DB.messageDB message, int fileState)
@@ -2277,6 +2388,48 @@ namespace SDKClient
             package.Send(ec);
             return package.id;
         }
+        public string SendFiletoDB(string path, string to, string resourceId, long fileSize, chatType type = chatType.chat, string groupName = null, int width = 0, int height = 0, string imgMD5 = null, SDKProperty.SessionType sessionType = SessionType.CommonChat, string msgId = "")
+        {
+            MessagePackage package = new MessagePackage()
+            {
+                from = property.CurrentAccount.userID.ToString(),
+                to = to,
+                id = string.IsNullOrEmpty(msgId) ? SDKProperty.RNGId : msgId
+            };
+            package.data = new message()
+            {
+                body = new fileBody()
+                {
+                    fileSize = fileSize,
+                    fileName = Path.GetFileName(path),
+                    id = resourceId,
+                    width = width,
+                    height = height,
+                    img = imgMD5
+                },
+              
+                chatType = to == property.CurrentAccount.userID.ToString() ? (int)SessionType.FileAssistant : (int)sessionType,
+                subType = "file",
+                senderInfo = new message.SenderInfo()
+                {
+                    photo = property.CurrentAccount.photo,
+                    userName = property.CurrentAccount.userName
+                },
+                type = type == chatType.chat ? nameof(chatType.chat) : nameof(chatType.groupChat)
+            };
+
+            if (type == chatType.groupChat)
+            {
+                package.data.groupInfo = new message.msgGroup()
+                {
+                    groupId = to.ToInt(),
+                    groupName = groupName
+                };
+            }
+            Util.Helpers.Async.Run(async () => await DAL.DALMessageHelper.SendMsgtoDB(package));
+
+            return package.id;
+        }
         public string SendSmallVideoMessage(string path, string to, string recordTime, string resourceId, string previewId, int width, int height, long fileSize, chatType type = chatType.chat, string groupName = null, SDKProperty.SessionType sessionType = SessionType.CommonChat, string msgId = "")
         {
             MessagePackage package = new MessagePackage()
@@ -2395,8 +2548,9 @@ namespace SDKClient
         /// <returns></returns>
         public async Task SendFileMessage(string fileFullName, Action<long,long> SetProgressSize,
             Action<(int isSuccess, string fileMD5, string msgId, string imgId, SDKProperty.ErrorState errorState, Func<string> func)> SendComplete, Action<long> ProgressChanged, string to,
-            chatType type = chatType.chat, System.Threading.CancellationToken? cancellationToken = null, MessageType messageType = MessageType.file, string groupName = null, string imgFullName = null)
+            chatType type = chatType.chat, System.Threading.CancellationToken? cancellationToken = null, MessageType messageType = MessageType.file, string groupName = null, string imgFullName = null,string msgId=null)
         {
+            
             await UploadFile(fileFullName, async result =>
             {
                 if (result.isSuccess)
@@ -2428,7 +2582,8 @@ namespace SDKClient
                                 {
                                     using (var bmp = new System.Drawing.Bitmap(bitImgFile))
                                     {
-                                        string msgId = SDKProperty.RNGId;
+                                        if (string.IsNullOrEmpty(msgId))
+                                            msgId = SDKProperty.RNGId;
                                         SendComplete?.Invoke((1, result.fileMD5, null, imgresult.imgMD5, SDKProperty.ErrorState.None, () =>
                                           msgId
                                         ));
@@ -2475,7 +2630,8 @@ namespace SDKClient
                                         //SendComplete?.Invoke((1, result.fileMD5, null, imgresult.imgMD5, SDKProperty.ErrorState.None, () =>
                                         // SDKClient.Instance.SendFileMessage(fileFullName, to, result.fileMD5, result.fileSize, type, groupName, bmp.Width, bmp.Height, imgresult.imgMD5)
                                         //));
-                                        string msgId = SDKProperty.RNGId;
+                                        if (string.IsNullOrEmpty(msgId))
+                                            msgId = SDKProperty.RNGId;
                                         SendComplete?.Invoke((1, result.fileMD5, null, imgresult.imgMD5, SDKProperty.ErrorState.None, () =>
                                           msgId
                                         ));
@@ -2502,11 +2658,12 @@ namespace SDKClient
                     else
                     {
                         // string msgId = SDKClient.Instance.SendFileMessage(fileFullName, to, result.fileMD5, result.fileSize, type, groupName);
-
-                        string msgId = SDKProperty.RNGId;
+                        if (string.IsNullOrEmpty(msgId))
+                            msgId = SDKProperty.RNGId;
                         SendComplete?.Invoke((1, result.fileMD5, null, null, SDKProperty.ErrorState.None, () =>
                           msgId
                         ));
+                        
                         //SendComplete?.Invoke((1, result.fileMD5, null, null, SDKProperty.ErrorState.None, () =>
                         SDKClient.Instance.SendFileMessage(fileFullName, to, result.fileMD5, result.fileSize, type, groupName, 0, 0, "", SessionType.CommonChat, msgId);
                         //));
@@ -2516,6 +2673,9 @@ namespace SDKClient
                 else
                 {
                     SendComplete?.Invoke((0, result.fileMD5, null, null, result.errorState, null));
+                    if (string.IsNullOrEmpty(msgId))
+                        msgId = SDKProperty.RNGId;
+                    SDKClient.Instance.SendFiletoDB(fileFullName, to, result.fileMD5, result.fileSize, type, groupName, 0, 0, "", SessionType.CommonChat, msgId);
                 }
             },(f,t) =>
             {
@@ -2634,16 +2794,30 @@ namespace SDKClient
             }
             else
             {
-                
-                Action<bool, string, SDKProperty.ErrorState> uploadDataCompleted = (b, s, e) =>
+                ResourceManifest resourceManifest = new ResourceManifest()
+                {
+                    MD5 = result.fileCode,
+                    Size = result.fileSize,
+                    State = (int)SDKProperty.ResourceState.Working
+                };
+                await DAL.DALResourceManifestHelper.InsertOrUpdateItem(resourceManifest);
+                Action<bool, string, SDKProperty.ErrorState> uploadDataCompleted = async (b, s, e) =>
                 {
                     if (!b)
                     {
+#if !CUSTOMSERVER
+
+                        await DAL.DALResourceManifestHelper.UpdateResourceState(s, ResourceState.NoStart);
+#endif
+
                         SendComplete?.Invoke((false, s, 0, e));
 
                     }
                     else
                     {
+#if !CUSTOMSERVER
+                        await DAL.DALResourceManifestHelper.UpdateResourceState(s, ResourceState.IsCompleted);
+#endif
                         FileInfo info = new FileInfo(fileFullName);
                         SendComplete?.Invoke((true, s, info.Length, SDKProperty.ErrorState.None));
 
@@ -2652,17 +2826,22 @@ namespace SDKClient
 #if CUSTOMSERVER
                 SDKClient.Instance.UpLoadResource(fileFullName, UploadProgressChanged, uploadDataCompleted, cancellationToken);
 #else
-                if (result.isBreakPoint)
+                
+                
+              
+                if (result.blocks != null&&result.blocks.Any())
                 {
-
+                    SetProgressSize?.Invoke(result.blocks.Count*result.blocks[0].blockSize, result.fileSize);
+                    SDKClient.Instance.ResumeUpload(fileFullName, result.fileCode, UploadProgressChanged, uploadDataCompleted, result.blocks.Select(b => b.blockNum).ToList(), cancellationToken);
                 }
                 else
                 {
                     SetProgressSize?.Invoke(0, result.fileSize);
-                    SDKClient.Instance.ResumeUpload(0, fileFullName,result.fileCode, UploadProgressChanged, uploadDataCompleted, cancellationToken);
+                    SDKClient.Instance.ResumeUpload(fileFullName, result.fileCode, UploadProgressChanged, uploadDataCompleted, null, cancellationToken);
                 }
+
 #endif
-               
+
             }
 
         }
@@ -3324,7 +3503,7 @@ namespace SDKClient
         }
 
 
-        #region CURD DB_historyAccount
+#region CURD DB_historyAccount
         /// <summary>
         /// 获取历史账户列表
         /// </summary>
@@ -3366,7 +3545,7 @@ namespace SDKClient
             return DAL.DALAccount.DeleteAccount(account);
         }
 
-        #endregion
+#endregion
 
         /// <summary>
         /// 发送好友申请
@@ -3653,15 +3832,15 @@ namespace SDKClient
         {
             return await IMRequest.GetNotice(noticeId);
         }
-        #region CURD DB_friend
+#region CURD DB_friend
         public void UpdateFriendApplyIsRead()
         {
             Task.Run(async () => await DAL.DALFriendApplyListHelper.UpdateTableIsRead());
         }
 
 
-        #endregion
-        #region DB
+#endregion
+#region DB
         /// <summary>
         /// 历史消息
         /// </summary>
@@ -3802,7 +3981,7 @@ namespace SDKClient
             await DAL.DALJoinGroupHelper.DeleteJoinGroupItem(groupId, userId);
         }
 
-        #endregion
+#endregion
 
         public string SearchNewFriend(string keyword, int pageIndex = 1)
         {
@@ -4235,13 +4414,14 @@ namespace SDKClient
             var db = await DAL.DALMessageHelper.Get(msgId);
             if (db != null)
             {
+                
                 MessagePackage package = Util.Helpers.Json.ToObject<MessagePackage>(db.Source);
                 package.Send(ec);
             }
         }
 
-        #endregion
-        #region 客服接口
+#endregion
+#region 客服接口
 
         public async Task<string> SendCustiomServerMsg(string to, string sessionId, SDKProperty.customOption customOption = customOption.over)
         {
@@ -4624,7 +4804,7 @@ namespace SDKClient
             package.data.userName = nickName;
             return package.Send(ec).id;
         }
-        #endregion
+#endregion
 
         public GetSensitiveWordsResponse GetBadWordUpdate(string lastTime)
         {
