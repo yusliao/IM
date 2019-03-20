@@ -261,11 +261,9 @@
     <Compile Include="RequestInfoParse.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="SDKPropertys.cs" />
-    <Compile Include="WebAPI\CustomServerModel.cs" />
     <Compile Include="WebAPI\IMRequest.cs" />
     <Compile Include="WebAPI\IMServiceURL.cs" />
     <Compile Include="WebAPI\Model.cs" />
-    <Compile Include="WebAPI\CustomServerURL.cs" />
     <Compile Include="WebAPI\WebAPICallBack.cs" />
   </ItemGroup>
   <ItemGroup>

@@ -16,13 +16,9 @@ namespace SDKClient
     /// </summary>
      class RequestInfoParse :IRequestInfoParser<PackageInfo>
     {
-        private static readonly RequestInfoParse parse = new RequestInfoParse();
+        public static readonly RequestInfoParse instance = new RequestInfoParse();
 
-        public static  RequestInfoParse instance
-        {
-            get { return parse; }
-           
-        }
+       
         [DebugLog]
         public PackageInfo ParseRequestInfo(byte[] source, int offset, int lengh)
         {
