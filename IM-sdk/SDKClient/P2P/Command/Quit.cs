@@ -11,7 +11,7 @@ using Util;
 
 namespace SDKClient.P2P.Command
 {
-    class Quit : CommandBase<CustomProtocolSession, BinaryRequestInfo>
+    public class Quit : CommandBase<CustomProtocolSession, BinaryRequestInfo>
     {
         public override void ExecuteCommand(CustomProtocolSession session, BinaryRequestInfo requestInfo)
         {

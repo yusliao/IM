@@ -216,7 +216,87 @@ namespace SDKClient.DAL
             }
 
         }
+        public static async Task SendFiletoDB(MessagePackage package)
+        {
+            DB.messageDB msg = new DB.messageDB()
+            {
+                from = package.from,
+                to = package.to,
+                msgTime = DateTime.Now,
+                msgId = package.id,
+                sessionType = package.data.chatType,
+                optionRecord = package.syncMsg == 1 ? 1 : 16,
+                roomId = package.to.ToInt(),
+                body = Util.Helpers.Json.ToJson(package.data.body),
+                SenderName = package.data.senderInfo.userName,
+                SenderPhoto = package.data.senderInfo.photo,
+                Source = Util.Helpers.Json.ToJson(package)
+            };
+            if (package.data.type == nameof(chatType.groupChat))
+            {
+                if (package.data.tokenIds != null && package.data.tokenIds.Any())
+                    msg.TokenIds = string.Join(",", package.data.tokenIds);
+                msg.roomId = package.data.groupInfo.groupId;
+                msg.roomType = 1;
+            }
+            else
+            {
+                msg.roomType = 0;
+            }
 
+            switch (package.data.subType.ToLower())
+            {
+               
+
+                case nameof(SDKProperty.MessageType.file):
+                    msg.msgType = nameof(SDKProperty.MessageType.file);
+                    msg.fileName = package.data.body.fileName;
+                    msg.resourcesmallId = package.data.body.img;
+                    msg.resourceId = package.data.body.id;
+                    msg.fileSize = package.data.body.fileSize;
+                    msg.content = "[文件]";
+                    msg.fileState = (int)SDKProperty.ResourceState.Failed;
+                    break;
+                case nameof(SDKProperty.MessageType.audio):
+                    msg.msgType = nameof(SDKProperty.MessageType.audio);
+                    msg.content = "对方发送语音消息，请在手机端查看";
+                    break;
+                case nameof(SDKProperty.MessageType.video):
+                    msg.msgType = nameof(SDKProperty.MessageType.video);
+                    msg.content = "对方发送视频消息，请在手机端查看";
+
+
+                    msg.fileName = package.data.body.fileName;
+                    msg.resourceId = package.data.body.id;
+                    msg.fileSize = package.data.body.fileSize;
+                    msg.content = "[视频]";
+                    msg.fileState = (int)SDKProperty.ResourceState.Failed;
+
+                    break;
+                case nameof(SDKProperty.MessageType.smallvideo):
+                    msg.msgType = nameof(SDKProperty.MessageType.smallvideo);
+                    msg.resourceId = package.data.body.id;
+                    msg.content = "[小视频]";
+                    msg.fileSize = package.data.body.fileSize;
+
+
+                    msg.fileName = package.data.body.fileName ?? package.data.body.id;
+                    msg.fileState = (int)SDKProperty.ResourceState.Failed;
+                    break;
+
+                default:
+                    break;
+            }
+            try
+            {
+                await SDKProperty.SQLiteConn.InsertAsync(msg);
+            }
+            catch (Exception ex)
+            {
+                SDKClient.logger.Error($"消息处理异常：error:{ex.Message},stack:{ex.StackTrace};\r\n" + "消息内容：" + msg);
+            }
+
+        }
 
         public static async Task SendMsgtoDB(CustomServicePackage package)
         {

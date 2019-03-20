@@ -39,19 +39,19 @@ namespace SDKClient
         private IEnumerable<CommandBase> CommmandSet { get; set; }  //命令集合
         [ImportMany(typeof(Util.Dependency.ConfigBase))]
         private IEnumerable<Util.Dependency.ConfigBase> EntityConfigs { get; set; }
-        private EasyClient<PackageInfo> ec = new EasyClient<PackageInfo>();//通讯接口对象
+        internal  EasyClient<PackageInfo> ec = new EasyClient<PackageInfo>();//通讯接口对象
 
         internal static Util.Logs.ILog logger = Util.Logs.Log.GetLog();//日志对象
         public event EventHandler<PackageInfo> NewDataRecv; //转发服务端数据
         public event EventHandler<P2PPackage> P2PDataRecv; //p2p消息处理
         public event EventHandler<OfflineMessageContext> OffLineMessageEventHandle; //转发离线聊天消息
-                                                                                    // public event EventHandler<string> networkMsgRecv; //p2p消息处理
-        static readonly Util.ImageOptimizer.Compressor compressor = new Util.ImageOptimizer.Compressor();//图片压缩处理对象
+                                                                                    
+       
         private static bool needStop = false;
         public readonly SDKProperty property = new SDKProperty();//SDK挂载的属性集对象
         public static SDKClient Instance { get; } = new SDKClient();
 
-
+        
         //心跳定时器
         public System.Threading.Timer timer = null;
         /// <summary>
@@ -62,24 +62,24 @@ namespace SDKClient
         /// <summary>
         /// 消息发送失败处理事件
         /// </summary>
-        public event EventHandler<(int roomId, bool isgroup, string msgId)> SendFaile;
-        internal void OnSendFaile(int roomId, bool isgroup, string msgId)
+        public event EventHandler<(int roomId, string msgId)> SendFaile;
+        internal void OnSendFaile(int roomId, string msgId)
         {
-            Instance.SendFaile?.BeginInvoke(this, (roomId, isgroup, msgId), null, null);
+            Instance.SendFaile?.BeginInvoke(this, (roomId, msgId), null, null);
         }
         /// <summary>
         /// 消息回包确认事件
         /// </summary>
-        public event EventHandler<(int roomId, bool isgroup, MessagePackage package, DateTime sendTime)> SendConfirm;
+        public event EventHandler<(int roomId, MessagePackage package, DateTime sendTime)> SendConfirm;
         /// <summary>
         /// 消息回包确认
         /// </summary>
         /// <param name="roomId"></param>
         /// <param name="isgroup"></param>
         /// <param name="msgId"></param>
-        internal void OnSendConfirm(int roomId, bool isgroup, MessagePackage package, DateTime dateTime)
+        internal void OnSendConfirm(int roomId, MessagePackage package, DateTime dateTime)
         {
-            Instance.SendConfirm?.BeginInvoke(this, (roomId, isgroup, package, dateTime), null, null);
+            Instance.SendConfirm?.BeginInvoke(this, (roomId, package, dateTime), null, null);
         }
         internal void OnOffLineMessageEventHandle(OfflineMessageContext context)
         {
@@ -132,10 +132,10 @@ namespace SDKClient
                     case ProtocolBase.messageCode:
                         MessagePackage messagePackage = packageInfo as MessagePackage;
                         if (messagePackage.data.type == nameof(SDKProperty.chatType.chat))
-                            SDKClient.Instance.OnSendFaile(packageInfo.to.ToInt(), false, packageInfo.id);
+                            SDKClient.Instance.OnSendFaile(packageInfo.to.ToInt(), packageInfo.id);
                         else
                         {
-                            SDKClient.Instance.OnSendFaile(messagePackage.data.groupInfo.groupId, true, packageInfo.id);
+                            SDKClient.Instance.OnSendFaile(messagePackage.data.groupInfo.groupId, packageInfo.id);
                         }
                         break;
                     default:
@@ -146,6 +146,7 @@ namespace SDKClient
         }
         /// <summary>
         ///连接状态 true:success;false:failed
+        ///通知UI底层通讯状态
         /// </summary>
         public event EventHandler<bool> ConnState;
         internal void OnSendConnState(bool isSuccess)
@@ -197,10 +198,26 @@ namespace SDKClient
             }
         }
 
-        private string lastSendTime = "2018-08-01 08:12";
-        public void GetBadWordEditTime()
+       
+       
+
+        private SDKClient()
         {
-            var obj = GetBadWordUpdate(lastSendTime);
+            //#region 通讯组件配置
+            //ec.Initialize(new RecvFilter2());
+            //ec.NewPackageReceived += Ec_NewPackageReceived;
+            //ec.Error += ec_Error;
+            //ec.Connected += ec_Connected;
+            //ec.Closed += ec_Closed;
+
+            //#endregion；
+           
+
+
+            #region MEF配置
+            MyComposePart();
+            #endregion
+            Init();
             #region 关键字过滤
             try
             {
@@ -224,65 +241,11 @@ namespace SDKClient
 
             }
             #endregion
-            if (obj == null)
-                return;
-            //DateTime dateTime = DateTime.Parse(obj.time);
-            //DateTime last = DateTime.Parse(GetLastUpdateTime());
-            WriteLatestValueToFile(obj.items);
-            //UpdateTimeSubmit(obj.time);
-        }
-
-        private void WriteLatestValueToFile(List<WebAPI.GetSensitiveWordsResponse.Keyword> list)
-        {
-            string path = Environment.CurrentDirectory;
-            string filepath = Path.Combine(path, "BadWord.txt");
-            try
-            {
-                using (FileStream fs = new FileStream(filepath, FileMode.Create, FileAccess.Write))
-                {
-                    using (StreamWriter sw = new StreamWriter(fs))
-                    {
-                        foreach (var item in list)
-                        {
-                            sw.WriteLine(item.word);
-                        }
-                        sw.Close();
-                    }
-                    fs.Close();
-                }
-            }
-            catch (Exception ex)
-            {
-
-                throw;
-            }
-
-
-        }
-
-        private SDKClient()
-        {
-            //#region 通讯组件配置
-            //ec.Initialize(new RecvFilter2());
-            //ec.NewPackageReceived += Ec_NewPackageReceived;
-            //ec.Error += ec_Error;
-            //ec.Connected += ec_Connected;
-            //ec.Closed += ec_Closed;
-
-            //#endregion；
-            // GetBadWordEditTime();
-
-
-            #region MEF配置
-            MyComposePart();
-            #endregion
-            Init();
-
 
         }
         private void Init()
         {
-            #region AOP设置
+            #region AOP设置 调试太卡放弃使用
             //  Util.Helpers.Ioc.Register(EntityConfigs.ToArray());
 
             #endregion
@@ -574,14 +537,8 @@ namespace SDKClient
             _token = token;
             try
             {
-#if DEBUG
-                property.QrServerIP = IPAddress.Parse(ProtocolBase.QrLoginIP);
-#else
-                    IPHostEntry iPHostEntry = Dns.GetHostEntry(ProtocolBase.QrLoginIP);
-                    property.QrServerIP = iPHostEntry.AddressList[0];
-#endif
-
-
+                IPHostEntry iPHostEntry = Dns.GetHostEntry(ProtocolBase.QrLoginIP);
+                property.QrServerIP = iPHostEntry.AddressList[0];
             }
             catch (Exception ex)
             {
@@ -649,7 +606,7 @@ namespace SDKClient
             {
 
                 logger.Error($"解析出错-{property.CurrentAccount.Session}\r\n包内容:\t{e.Package.ToString()}");
-                SendPackageToCloud(e.Package, 4);
+                SendErrorToCloud(e.Package, 4);
                 StartReConn();
                 return;
             }
@@ -677,7 +634,7 @@ namespace SDKClient
                 catch (Exception ex)
                 {
                     logger.Error($"消息处理异常：error:{ex.Message},stack:{ex.StackTrace};\r\ncontent:{Util.Helpers.Json.ToJson(e.Package)}");
-                    SendPackageToCloud(e.Package, 4);
+                    SendErrorToCloud(e.Package, 4);
                     if (cmd != null && cmd.Name == Protocol.ProtocolBase.GetOfflineMessageList)
                     {
                         System.Threading.Interlocked.CompareExchange(ref SDKClient.Instance.property.CanHandleMsg, 2, 1);
@@ -713,7 +670,7 @@ namespace SDKClient
 
         }
 
-        private void SendPackageToCloud(PackageInfo packageInfo, int msgType)
+        private void SendErrorToCloud(PackageInfo packageInfo, int msgType)
         {
             WebAPI.ErrorPackage errorPackage = new WebAPI.ErrorPackage()
             {
@@ -762,74 +719,12 @@ namespace SDKClient
             else
                 GetLoginQRCode();
         }
+     
+       
         #region 公开的功能
-        /// <summary>
-        /// 发送本文消息
-        /// </summary>
-        /// <param name="content">消息内容</param>
-        /// <param name="to">接收者</param>
-        /// <param name="userIds">被@对象集合,@ALL定义为值-1</param>
-        /// <param name="type">消息类型chat,groupchat</param>
-        /// <returns>id</returns>
+      
 
-        public async Task<string> Sendtxt(string content, string to, IList<int> userIds = null, chatType type = chatType.chat, string groupName = null, SDKProperty.SessionType sessionType = SessionType.CommonChat, message.ReceiverInfo recverInfo = null)
-        {
-
-            return await GetData(() =>
-            {
-                MessagePackage package = new MessagePackage();
-                package.ComposeHead(to, property.CurrentAccount.userID.ToString());
-
-                package.data = new message()
-                {
-                    body = new TxtBody()
-                    {
-                        text = content
-                    },
-                    senderInfo = new message.SenderInfo()
-                    {
-                        photo = property.CurrentAccount.photo,
-                        userName = property.CurrentAccount.userName ?? property.CurrentAccount.loginId
-                    },
-                    receiverInfo = recverInfo,
-                    chatType = to == property.CurrentAccount.userID.ToString() ? (int)SessionType.FileAssistant : (int)sessionType,
-                    subType = "txt",
-                    tokenIds = userIds,
-                    type = type == chatType.chat ? nameof(chatType.chat) : nameof(chatType.groupChat)
-                };
-                if (type == chatType.groupChat)
-                {
-                    package.data.groupInfo = new message.msgGroup()
-                    {
-                        groupId = to.ToInt(),
-                        groupName = groupName
-                    };
-                }
-
-                package.Send(ec);
-                System.Threading.SpinWait spinWait = new System.Threading.SpinWait();
-                spinWait.SpinOnce();
-                return package.id;
-
-                //Task.Run(() =>
-                //    {
-                //        if (content.Equals("SHOWMETHEMONEY"))
-                //        {
-                //            for (int i = 0; i < 100; i++)
-                //            {
-                //                package.data.body.text = $"{content}{i}";
-                //                package.id = SDKProperty.RNGId;
-                //                package.Send(ec);
-
-                //            }
-                //        }
-                //    });
-
-                //return package.id;
-            }).ConfigureAwait(false);
-
-        }
-
+        
         /// <summary>
         /// 发送个人名片
         /// </summary>
@@ -1038,249 +933,7 @@ namespace SDKClient
                 //return package.id;
             }
         }
-        public void GetThefuckOfflineMessageList()
-        {
-            Task.Run(async () =>
-            {
-                //获取汇总
-                var r = await IMRequest.GetSummaryInfo().ConfigureAwait(false);
-                if (r.code == 0)
-                {
-
-                    var optlst = r.operMsgList;
-                    if (optlst != null && optlst.Any())
-                    {
-                        foreach (var opt in optlst)
-                        {
-                            var c = opt.content;
-                            string item = Util.Helpers.Json.ToJson(c);
-                            PackageInfo obj = Util.Helpers.Json.ToObject<PackageInfo>(item);
-                            if (obj.code != 0)
-                                continue;
-                         
-                            switch (obj.apiId)
-                            {
-                                case ProtocolBase.DeleteFriendCode:
-                                   
-                                    obj = Newtonsoft.Json.JsonConvert.DeserializeObject<DeleteFriendPackage>(item);
-                                   
-                                    break;
-                                case ProtocolBase.UpdateFriendRelationCode:
-
-                                    obj = Newtonsoft.Json.JsonConvert.DeserializeObject<UpdateFriendRelationPackage>(item);
-                                    SDKClient.Instance.OnNewDataRecv(obj);
-
-                                    break;
-
-                                case Protocol.ProtocolBase.InviteJoinGroupCode:
-                                    obj = Newtonsoft.Json.JsonConvert.DeserializeObject<InviteJoinGroupPackage>(item);
-
-                                    await DAL.DALGroupOptionHelper.SendMsgtoDB(Util.Helpers.Json.ToObject<InviteJoinGroupPackage>(item));
-                                    break;
-                                case Protocol.ProtocolBase.UpdateGroupCode:
-                                    obj = Newtonsoft.Json.JsonConvert.DeserializeObject<UpdateGroupPackage>(item);
-                                    await DAL.DALGroupOptionHelper.SendMsgtoDB(Util.Helpers.Json.ToObject<UpdateGroupPackage>(item));
-                                   
-                                    break;
-                                case Protocol.ProtocolBase.JoinGroupCode:
-                                    obj = Newtonsoft.Json.JsonConvert.DeserializeObject<JoinGroupPackage>(item);
-                                    JoinGroupPackage jgp = Util.Helpers.Json.ToObject<JoinGroupPackage>(item);
-                                    if (jgp.code == 0)
-                                    {
-                                        //管理员收到入群申请
-                                        if (obj.from != SDKClient.Instance.property.CurrentAccount.userID.ToString())
-                                        {
-                                            await DAL.DALJoinGroupHelper.RecvJoinGroup(jgp);
-                                            await DAL.DALJoinGroupHelper.SendMsgtoDB(jgp);
-                                           
-                                        }
-                                        else
-                                        {
-                                            if (jgp.data.isAccepted)
-                                            {
-                                                await DAL.DALJoinGroupHelper.SendMsgtoDB(jgp);
-                                                await DAL.DALJoinGroupHelper.DeleteJoinGroupItem(jgp);
-                                            }
-                                        }
-                                    }
-                                    else if (jgp.code == (int)Protocol.StatusCode.UserIsGroupMember || jgp.code == (int)Protocol.StatusCode.AlreadyCompleted)
-                                    {
-
-                                        await DAL.DALJoinGroupHelper.DeleteJoinGroupItem(jgp);
-                                    }
-
-                                    break;
-                                case Protocol.ProtocolBase.AddFriendCode:
-                                    obj = Newtonsoft.Json.JsonConvert.DeserializeObject<AddFriendPackage>(item);
-                                    await DAL.DALFriendApplyListHelper.InsertOrUpdateItem(Util.Helpers.Json.ToObject<AddFriendPackage>(item));
-                                    SDKClient.Instance.property.FriendApplyList = Util.Helpers.Async.Run(async () => await DAL.DALFriendApplyListHelper.GetFriendApplyList());
-                                    break;
-                                case Protocol.ProtocolBase.AddFriendAcceptedCode:
-                                    obj = Newtonsoft.Json.JsonConvert.DeserializeObject<AddFriendAcceptedPackage>(item);
-                                    AddFriendAcceptedPackage afap = Util.Helpers.Json.ToObject<AddFriendAcceptedPackage>(item);
-                                    //接收加好友
-                                    if (afap.code == 0 || obj.code == (int)Protocol.StatusCode.AlreadyBecomeFriend)
-                                    {
-                                        await DAL.DALContactListHelper.DeleteCurrentContactListPackage();
-                                        if (afap.data.userId == SDKClient.Instance.property.CurrentAccount.userID)
-                                        {
-                                            await DAL.DALFriendApplyListHelper.UpdateItemIsChecked(afap.data.friendId);
-                                            await DAL.DALUserInfoHelper.UpdateItemIsChecked(afap.data.friendId);
-                                            var db = await DAL.DALMessageHelper.SendMsgtoDB(afap.id, afap.from, obj.to, "已经是好朋友，开始聊天吧", afap.data.friendId, afap.data.userId, SDKProperty.MessageType.notification, SDKProperty.MessageState.isRead);
-                                           
-                                            await DAL.DALMessageHelper.UpdateMsgSessionTypeToCommon(afap.data.friendId);
-                                            await DAL.DALStrangerOptionHelper.DeleteStranger(afap.data.friendId);
-                                        }
-                                        else
-                                        {
-                                            await DAL.DALFriendApplyListHelper.UpdateItemIsChecked(afap.data.userId);
-                                            await DAL.DALUserInfoHelper.UpdateItemIsChecked(afap.data.userId);
-                                            if (afap.data.type != 1)//服务器代发的同意消息，不需要添加提示
-                                            {
-                                                var db = await DAL.DALMessageHelper.SendMsgtoDB(afap.id, afap.from, afap.to, "已经是好朋友，开始聊天吧", afap.data.userId, afap.data.userId, SDKProperty.MessageType.notification, SDKProperty.MessageState.isRead);
-                                               
-                                            }
-                                            await DAL.DALMessageHelper.UpdateMsgSessionTypeToCommon(afap.data.userId);
-                                            await DAL.DALStrangerOptionHelper.DeleteStranger(afap.data.userId);
-                                        }
-
-
-                                    }
-                                    else if (afap.code == (int)Protocol.StatusCode.AuditFriendApplyError)
-                                    {
-                                        if (afap.data.userId == SDKClient.Instance.property.CurrentAccount.userID)
-                                            await DAL.DALFriendApplyListHelper.DeleteItem(afap.data.friendId);
-                                        else
-                                            await DAL.DALFriendApplyListHelper.DeleteItem(afap.data.friendId);
-                                    }
-                                    break;
-                                case Protocol.ProtocolBase.SetMemberPowerCode:
-                                    obj = Newtonsoft.Json.JsonConvert.DeserializeObject<SetMemberPowerPackage>(item);
-                                    SetMemberPowerPackage smpp = Util.Helpers.Json.ToObject<SetMemberPowerPackage>(item);
-                                    await DAL.DALGroupOptionHelper.SendMsgtoDB(smpp);
-                                 
-                                    break;
-                                case Protocol.ProtocolBase.ExitGroupCode:
-                                    obj = Newtonsoft.Json.JsonConvert.DeserializeObject<ExitGroupPackage>(item);
-                                    var egp = Util.Helpers.Json.ToObject<ExitGroupPackage>(item);
-                                    if (obj.code == 0)
-                                    {
-                                        if (egp.data.userIds.Contains(SDKClient.Instance.property.CurrentAccount.userID))//自己退群
-                                        {
-                                            if (egp.data.adminId == 0)
-                                            {
-                                                //删除群的聊天记录
-                                                await DAL.DALMessageHelper.DeleteHistoryMsg(egp.data.groupId, chatType.groupChat);
-                                                await DAL.DALGroupOptionHelper.DeleteGroupListPackage();
-                                                await DAL.DALJoinGroupHelper.DeleteJoinGroupItem(egp.data.groupId);//删除该群的入群申请列表
-                                                                                                                   //  Util.Helpers.Async.Run(async () => await DAL.DALGroupOptionHelper.DeleteGroupMemberListPackage(package.data.groupId));
-                                            }
-                                            else//被T出
-                                            {
-                                                var goh_msg = await DAL.DALGroupOptionHelper.SendMsgtoDB(egp);
-                                             
-                                                await DAL.DALMessageHelper.UpdateMsgIsRead(egp.data.groupId, 1);
-                                                await DAL.DALJoinGroupHelper.DeleteJoinGroupItem(egp.data.groupId);//删除该群的入群申请列表
-                                            }
-                                        }
-                                        else
-                                        {
-                                            if (egp.data.adminIds != null && egp.data.adminIds.Contains(SDKClient.Instance.property.CurrentAccount.userID))
-                                            {
-                                                var goh_msg = await DAL.DALGroupOptionHelper.SendMsgtoDB(egp);
-                                             
-                                            }
-                                        }
-
-                                    }
-
-                                    break;
-                                case Protocol.ProtocolBase.DismissGroupCode:
-                                    obj = Newtonsoft.Json.JsonConvert.DeserializeObject<DismissGroupPackage>(item);
-                                    var dgp = Util.Helpers.Json.ToObject<DismissGroupPackage>(item);
-
-                                    if (dgp.code == 0)
-                                    {
-                                        //群主本人则删除群的聊天记录
-                                        if (dgp.data.ownerId == SDKClient.Instance.property.CurrentAccount.userID)
-                                            await DAL.DALMessageHelper.DeleteHistoryMsg(dgp.data.groupId, chatType.groupChat);
-                                        await DAL.DALGroupOptionHelper.DeleteGroupListPackage();
-                                        //Util.Helpers.Async.Run(async () => await DAL.DALGroupOptionHelper.DeleteGroupMemberListPackage(package.data.groupId));
-                                        var goh_msg = await DAL.DALGroupOptionHelper.SendMsgtoDB(dgp);
-                                    
-                                        await DAL.DALJoinGroupHelper.DeleteJoinGroupItem(dgp.data.groupId);//删除该群的入群申请列表
-                                        await DAL.DALMessageHelper.UpdateMsgIsRead(dgp.data.groupId, 1);
-                                    }
-                                    break;
-                                case Protocol.ProtocolBase.JoinGroupAcceptedCode:
-                                    obj = Newtonsoft.Json.JsonConvert.DeserializeObject<JoinGroupAcceptedPackage>(item);
-                                    var jgap = Util.Helpers.Json.ToObject<JoinGroupAcceptedPackage>(item);
-
-                                    if (jgap.code == 0)
-                                    {
-                                        // Task.Run(async () => await DAL.DALGroupOptionHelper.DeleteGroupMemberListPackage(package.data.groupId));
-                                        //TODO:删除群申请列表中申请记录
-                                        await DAL.DALJoinGroupHelper.DeleteJoinGroupItem(jgap as JoinGroupAcceptedPackage);
-                                        //入群通知消息入库
-                                        if (jgap.data.auditStatus == 1)
-                                        {
-                                            var jgap_msg = await DAL.DALGroupOptionHelper.SendMsgtoDB(jgap);
-                                          
-                                        }
-                                    }
-                                    else if (jgap.code == (int)Protocol.StatusCode.UserIsGroupMember || jgap.code == (int)Protocol.StatusCode.AlreadyCompleted)
-                                    {
-                                        if (!await DAL.DALJoinGroupHelper.DeleteJoinGroupItem(jgap as JoinGroupAcceptedPackage))
-                                            SDKClient.logger.Error($"删除入群申请记录失败：{item.ToString()}");
-
-                                    }
-                                    break;
-                                    //case Protocol.ProtocolBase.SyncMsgStatusCode:
-                                    //    var smsp = Util.Helpers.Json.ToObject<SyncMsgStatusPackage>(Util.Helpers.Json.ToJson(item));
-
-                                    //    if (smsp.code == 0)
-                                    //    {
-                                    //        if (smsp.data.partnerId == 0)
-                                    //            await DAL.DALMessageHelper.UpdateMsgIsRead(smsp.data.groupId, (int)SDKProperty.chatType.groupChat);
-                                    //        else
-                                    //            await DAL.DALMessageHelper.UpdateMsgIsRead(smsp.data.partnerId, (int)SDKProperty.chatType.chat);
-                                    //    }
-
-                                    //    break;
-                            }
-
-                            this.OnNewDataRecv(obj);
-                        }
-                    }
-                    //获取这次拉取的时间
-                    var data = r.entryList;
-                    double ts = r.deadTime;
-                    var ole = new DateTime(1970, 1, 1).AddMilliseconds(ts);
-                    var lh = ole.ToLocalTime();
-                    DAL.DALAccount.UpdateAccountOfflineMsgTime(lh);//记录这次拉取的时间值
-
-                    //按条目拉取消息，并且记录未拉取任务
-                    data.ForEach(room =>
-                    {
-
-                        room.fromTime = ts;
-                        if (property.CurrentAccount.GetOfflineMsgTime.HasValue)
-                            room.earlyTime = (property.CurrentAccount.GetOfflineMsgTime.Value.ToUniversalTime() - new DateTime(1970, 1, 1)).TotalMilliseconds;
-                        else
-                        {
-                            room.earlyTime = 0;
-                        }
-                        OffLineMsgController.CreateTask_Offline(room, true);
-
-                    });
-                }
-            });
-            // 开始未完成的任务
-            Task.Run(() =>
-            {
-                OffLineMsgController.RunOffLineTasks();
-            });
-        }
+        
         /// <summary>
         /// 获取当前用户的登录信息
         /// </summary>
@@ -1317,607 +970,7 @@ namespace SDKClient
         }
 
 
-        /// <summary>
-        /// 查找资源是否存在
-        /// </summary>
-        /// <param name="resourceName">资源全路径</param>
-        /// <returns></returns>
-        public async Task<(bool existed, string resourceId, long fileSize)> FindResource(string resourceFullName)
-        {
-            try
-            {
-
-                //验证资源是否存在
-
-                //  var filedata = File.ReadAllBytes(resourceFullName);
-                // var name = Util.Helpers.Encrypt.Md5By32(filedata);
-                using (FileStream fs = File.OpenRead(resourceFullName))
-                {
-                    string md5 = Util.Helpers.Encrypt.Md5By32(fs);
-
-                    var t = await WebAPICallBack.FindResource($"{md5}{Path.GetExtension(resourceFullName)}");
-
-                    if (t.isExist)
-                        return (t.isExist, $"{md5}{Path.GetExtension(resourceFullName)}", fs.Length);
-                    else
-                        return (false, $"{md5}{Path.GetExtension(resourceFullName)}", fs.Length);
-                }
-            }
-            catch (Exception)
-            {
-
-                return (false, null, 0);
-            }
-        }
-        /// <summary>
-        /// 查找资源是否存在
-        /// </summary>
-        /// <param name="resourceName">资源全路径</param>
-        /// <returns></returns>
-        public async Task<fileInfo> IsFileExist(string resourceFullName)
-        {
-            try
-            {
-
-                //验证资源是否存在
-
-                //  var filedata = File.ReadAllBytes(resourceFullName);
-                // var name = Util.Helpers.Encrypt.Md5By32(filedata);
-                using (FileStream fs = File.OpenRead(resourceFullName))
-                {
-                    long len = fs.Length;
-                    string md5 = Util.Helpers.Encrypt.Md5By32(fs);
-
-                    var file = await WebAPICallBack.FindResource($"{md5}{Path.GetExtension(resourceFullName)}");
-                    if(file==null||!file.isExist)
-                    {
-                        file.fileSize = len;
-                        file.fileCode = $"{md5}{Path.GetExtension(resourceFullName)}";
-                        
-                    }
-                    return file;
-                }
-            }
-            catch (Exception ex)
-            {
-                logger.Error(ex.Message);
-                return null;
-            }
-        }
-        /// <summary>
-        /// 上传资源
-        /// </summary>
-        /// <param name="resourceName">资源全路径名称</param>
-        /// <param name="UploadProgressChanged">上传进度</param>
-        /// <param name="UploadDataCompleted"></param>
-        /// <returns></returns>
-        public void UpLoadResource( string resourceFullName, Action<long> UploadProgressChanged, Action<bool, string, SDKProperty.ErrorState> UploadDataCompleted,
-            System.Threading.CancellationToken? cancellationToken = null)
-        {
-
-            //上传资源
-            if (File.Exists(resourceFullName))
-            {
-                FileInfo info = new FileInfo(resourceFullName);
-                if (info.Length > 500 * 1000 * 1000)
-                {
-                    UploadDataCompleted?.Invoke(false, null, SDKProperty.ErrorState.OutOftheControl);
-                    return;
-                }
-                byte[] filedata = null;
-                try
-                {
-                    filedata = File.ReadAllBytes(resourceFullName);
-                }
-                catch (Exception ex)
-                {
-                    UploadDataCompleted?.Invoke(false, resourceFullName, SDKProperty.ErrorState.AppError);
-                    logger.Error($"UploadError: filename:{resourceFullName},ex:{ex.Message}");
-                    return;
-                }
-
-#if !CUSTOMSERVER
-
-                string flag = DateTime.Now.Ticks.ToString("x");//不能删除
-                var boundary = "---------------------------" + flag;
-
-                string httpRow = $"--{boundary}\r\nContent-Disposition: form-data; name=\"uploadfile\"; filename=\"{Path.GetFileName(resourceFullName)}\"\r\nContent-Type: application/octet-stream\r\n\r\n";
-                var datas = Encoding.UTF8.GetBytes(httpRow);
-                datas = datas.Concat(filedata)
-                    .Concat(Encoding.UTF8.GetBytes("\r\n"))
-                    .Concat(Encoding.UTF8.GetBytes($"--{ boundary}--\r\n")).ToArray();
-
-
-                WebClient webClient = new WebClient();
-                webClient.Headers.Add("Content-Type", "multipart/form-data; boundary=" + boundary);
-                webClient.UploadProgressChanged += (s, e) =>
-                {
-                    if (cancellationToken == null || !cancellationToken.Value.IsCancellationRequested)
-                        UploadProgressChanged?.Invoke(e.BytesSent);
-                    else
-                        webClient.CancelAsync();
-
-                };
-                webClient.UploadDataCompleted += (s, e) =>
-                {
-
-                    if (e.Error == null)
-                    {
-                        UploadResult webapiResult = Util.Helpers.Json.ToObject<WebAPI.UploadResult>(Encoding.UTF8.GetString(e.Result));
-                        if (webapiResult.code == 0)
-                        {
-                            UploadDataCompleted?.Invoke(true, webapiResult.uploadResult.First().fileCode, SDKProperty.ErrorState.None);
-                            var fileFullName = Path.Combine(property.CurrentAccount.filePath, Path.GetFileName(resourceFullName));
-                            //if(fileType== FileType.file)
-                            //{
-                            //    lock (obj_lock)
-                            //    {
-
-                            //        File.WriteAllBytes(fileFullName, filedata);
-                            //    }
-                            //}
-                            //else
-                            //{
-                            //    if (!File.Exists(fileFullName))
-                            //    {
-                            //        lock (obj_lock)
-                            //        {
-                            //            if (!File.Exists(fileFullName))
-                            //                File.WriteAllBytes(fileFullName, filedata);
-                            //        }
-                            //    }
-                            //}
-                        }
-                        else
-                        {
-                            UploadDataCompleted?.Invoke(false, webapiResult.uploadResult.First().fileCode, SDKProperty.ErrorState.ServerException);
-                            logger.Error($"UploadError: code:{webapiResult.code},error:{webapiResult.error},id:{webapiResult.uploadResult.First().fileCode}");
-                        }
-                    }
-                    else
-                    {
-                        if (e.Cancelled)
-                        {
-                            UploadDataCompleted?.Invoke(false, resourceFullName, SDKProperty.ErrorState.Cancel);
-                            logger.Info($"UploadCancel: filename:{resourceFullName}");
-                        }
-                        else
-                        {
-                            UploadDataCompleted?.Invoke(false, resourceFullName, SDKProperty.ErrorState.NetworkException);
-                            logger.Error($"UploadError: filename:{resourceFullName},ex:{e.Error.Message}");
-                        }
-                    }
-                };
-
-                webClient.UploadDataAsync(new Uri(Protocol.ProtocolBase.uploadresource), datas);
-#else
-                WebClient webClient = new WebClient();
-                webClient.UploadFileCompleted += (s, e) =>
-                {
-                    if (e.Error == null)
-                    {
-                        dynamic d = Util.Helpers.Json.ToObject<dynamic>(Encoding.UTF8.GetString(e.Result));
-                        if (d.code != 1)
-                        {
-                            UploadDataCompleted?.Invoke(false, d.message, SDKProperty.ErrorState.ServerException);
-                            logger.Error($"UploadError: code:{d.code},error:{d.message},id:{resourceFullName}");
-                        }
-                        else
-                        {
-                            UploadDataCompleted?.Invoke(true, $"{d.data.originalphoto},{d.data.thumbnailphoto}", SDKProperty.ErrorState.None);
-                        }
-                    }
-                    else
-                    {
-                        if (e.Cancelled)
-                        {
-                            UploadDataCompleted?.Invoke(false, resourceFullName, SDKProperty.ErrorState.Cancel);
-                            logger.Info($"UploadCancel: filename:{resourceFullName}");
-                        }
-                        else
-                        {
-                            UploadDataCompleted?.Invoke(false, resourceFullName, SDKProperty.ErrorState.NetworkException);
-                            logger.Error($"UploadError: filename:{resourceFullName},ex:{e.Error.Message}");
-                        }
-                    }
-                };
-                webClient.UploadProgressChanged += (s, e) =>
-                {
-                    if (cancellationToken == null || !cancellationToken.Value.IsCancellationRequested)
-                        UploadProgressChanged?.Invoke(e.BytesSent);
-                    else
-                        webClient.CancelAsync();
-                };
-                string strtime = DateTime.Now.ToString("yyyyMMddHHmmss");
-                string param = $"upload{strtime}{CustomServerURL.CSKEY}";
-                string signatureresult = MJD.Utility.UtilityCrypto.Encrypt(param, MJD.Utility.CryptoProvider.MD5).ToLower();
-
-                webClient.Headers.Add("signature", signatureresult);
-                webClient.Headers.Add("action", "upload");
-                webClient.Headers.Add("time", strtime);
-                var source = new System.Drawing.Bitmap(resourceFullName);
-                webClient.UploadFileAsync(new Uri($"{WebAPI.CustomServerURL.UploadIMG}?width={source.Width}&height={source.Height}"), resourceFullName);
-#endif
-                return;
-            }
-            else
-                return;
-        }
-        //UpLoadResource//ResumeUpload
-        public async void ResumeUpload(string resourceFullName,string md5,Action<long> UploadProgressChanged, Action<bool, string, SDKProperty.ErrorState> UploadDataCompleted,
-           List<int> blockNum,  System.Threading.CancellationToken? cancellationToken = null)
-        {
-            
-            int blocklen = 1024 * 1024 * 2;
-            using (FileStream fs = new FileStream(resourceFullName, FileMode.Open))
-            {
-               
-                long totalCount = fs.Length;
-                long totalnum = totalCount / blocklen;
-                if (totalCount % blocklen != 0)
-                    totalnum += 1;
-                fs.Seek(0, SeekOrigin.Begin);
-                SDKProperty.ErrorState errorState = ErrorState.None;
-                for (int i = 1; i < (totalnum+1); i++)
-                {
-                    if (blockNum!=null&&blockNum.Contains(i))
-                        continue;
-                    if (cancellationToken.HasValue && cancellationToken.Value.IsCancellationRequested)
-                    {
-                        errorState = ErrorState.Cancel;
-                        break;
-                    }
-                        
-                    byte[] buff = new byte[blocklen];
-                    int len = fs.Read(buff, 0, buff.Length);
-                    if (len == blocklen)
-                    {
-                        await WebAPICallBack.ResumeUpload(buff, i, blocklen, md5, totalCount, totalnum).ContinueWith(async t =>
-                        {
-                            if(t.IsFaulted)//服务不可用
-                            {
-                                //TODO:
-                                // UploadDataCompleted?.Invoke(false, md5, ErrorState.NetworkException);
-                                errorState = errorState== ErrorState.Cancel? errorState: ErrorState.NetworkException;
-                                
-                            }
-                            else
-                            {
-                                var obj = t.Result;
-                                if (!obj.Success)
-                                {
-                                    if (obj.code == "-999")
-                                    {
-                                        errorState = errorState == ErrorState.Cancel ? errorState : ErrorState.NetworkException;
-                                        return;
-                                    }
-                                    bool isOk = false;
-                                    for (int j = 0; j < 5; j++)
-                                    {
-                                       var r = await WebAPICallBack.ResumeUpload(buff, i, blocklen, md5, totalCount, totalnum);
-                                        isOk = r.Success;
-                                        if (isOk)
-                                            break;
-                                            
-                                    }
-                                    if (!isOk)
-                                        errorState = errorState == ErrorState.Cancel ? errorState : ErrorState.NetworkException;
-
-                                }
-                                else
-                                {
-                                    UploadProgressChanged?.Invoke(len);
-                                }
-                            }
-                        });
-
-                    }
-                    else
-                    {
-                        byte[] temp = new byte[len];
-                        Buffer.BlockCopy(buff, 0, temp, 0, len);
-                        await WebAPICallBack.ResumeUpload(temp, i, len, md5, totalCount, totalnum).ContinueWith(async t =>
-                        {
-                            if (t.IsFaulted)
-                            {
-                                //TODO:
-                                errorState = errorState == ErrorState.Cancel ? errorState : ErrorState.NetworkException;
-                            }
-                            else
-                            {
-                                var obj = t.Result;
-                                if (!obj.Success)
-                                {
-
-                                    if (obj.code == "-999")
-                                    {
-                                        errorState = errorState == ErrorState.Cancel ? errorState : ErrorState.NetworkException;
-                                        return;
-                                    }
-                                    bool isOk = false;
-                                    for (int j = 0; j < 5; j++)
-                                    {
-                                        var r = await WebAPICallBack.ResumeUpload(buff, i, blocklen, md5, totalCount, totalnum);
-                                        isOk = r.Success;
-                                        if (isOk)
-                                            break;
-
-                                    }
-                                    if (!isOk)
-                                        errorState = errorState == ErrorState.Cancel ? errorState : ErrorState.NetworkException;
-
-                                }
-                                else
-                                {
-                                    UploadProgressChanged?.Invoke(len);
-                                }
-                            }
-
-                        });
-                    }
-
-
-                }
-                if(errorState!= ErrorState.None)
-                {
-                    UploadDataCompleted?.Invoke(false, md5, errorState);
-                }
-                else
-                {
-                    UploadDataCompleted?.Invoke(true, md5, ErrorState.None);
-                }
-
-            }
-        }
-
-
-
-        private static object obj_lock = new object();
-        //DownloadFileWithResume
-        public void DownLoadResource(string resourceName, string fileName, FileType fileType, Action<long> downloadProgressChanged, 
-            Action<bool> downloadDataCompleted, string msgId, System.Threading.CancellationToken? cancellationToken = null)
-        {
-            void UpdateFileState(DB.messageDB message, int fileState)
-            {
-                if (message == null)
-                    return;
-                int i = Util.Helpers.Async.Run(async () => await SDKProperty.SQLiteConn.ExecuteAsync($"update messageDB set fileState={fileState} where Id='{message.Id}'"));
-            }
-            var m = Util.Helpers.Async.Run(async () => await DAL.DALMessageHelper.Get(msgId));
-#if !CUSTOMSERVER
-
-            WebClient webClient = new WebClient();
-
-            UpdateFileState(m, (int)ResourceState.Working);
-            webClient.DownloadProgressChanged += (s, e) =>
-            {
-                if (cancellationToken == null || !cancellationToken.Value.IsCancellationRequested)
-                    downloadProgressChanged?.Invoke(e.BytesReceived);
-                else
-                {
-                    webClient.CancelAsync();
-                    UpdateFileState(m, (int)ResourceState.IsCancelled);
-
-                }
-            };
-
-            webClient.DownloadDataCompleted += (s, e) =>
-            {
-                try
-                {
-                    // if (((WebClient)s).ResponseHeaders.GetValue("Content-Type") != "application/json")
-                    if (!((WebClient)s).ResponseHeaders.GetValue("Content-Type").ToLower().Contains("application/json"))
-                    {
-                        if (e.Error == null && e.Cancelled == false && e.Result.Length > 0)
-                        {
-                            try
-                            {
-                                if (e.Result.Length < 100)
-                                {
-                                    logger.Error($"下载资源失败;message:{Encoding.UTF8.GetString(e.Result)},name:{resourceName}");
-                                    downloadDataCompleted?.Invoke(false);
-                                    return;
-                                }
-                                var data = e.Result;
-                                string basePath = null;
-
-                                switch (fileType)
-                                {
-                                    case FileType.img:
-                                        basePath = Path.Combine(SDKProperty.imgPath, property.CurrentAccount.loginId);
-                                        if (!Directory.Exists(basePath))
-                                            Directory.CreateDirectory(basePath);
-                                        break;
-                                    case FileType.file:
-                                        basePath = Path.Combine(SDKProperty.filePath, property.CurrentAccount.loginId);
-                                        if (!Directory.Exists(basePath))
-                                            Directory.CreateDirectory(basePath);
-                                        break;
-                                    default:
-                                        break;
-                                }
-                                if (Path.IsPathRooted(fileName))
-                                {
-                                    var dir = Path.GetDirectoryName(fileName);
-                                    if (!Directory.Exists(dir))
-                                        Directory.CreateDirectory(dir);
-                                    if (!File.Exists(fileName))
-                                    {
-                                        lock (obj_lock)
-                                        {
-                                            if (!File.Exists(fileName))
-                                            {
-                                                File.WriteAllBytes(fileName, data);
-                                                // Util.Helpers.Async.Run(async () => await DAL.DALMessageHelper.UpdateMsgNewFileName(msgId, fileName));
-                                            }
-                                        }
-                                    }
-                                }
-                                else
-                                {
-                                    if (!File.Exists(Path.Combine(basePath, fileName)))
-                                    {
-                                        lock (obj_lock)
-                                        {
-                                            if (!File.Exists(Path.Combine(basePath, fileName)))
-                                            {
-                                                File.WriteAllBytes(Path.Combine(basePath, fileName), data);
-                                                //  Util.Helpers.Async.Run(async () => await DAL.DALMessageHelper.UpdateMsgNewFileName(msgId, Path.Combine(basePath, fileName)));
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-
-                                logger.Error($"下载资源失败;message:{ex.Message},name:{resourceName}");
-                                UpdateFileState(m, (int)ResourceState.NoStart);
-                                downloadDataCompleted?.Invoke(false);
-                                return;
-                            }
-                            UpdateFileState(m, (int)ResourceState.IsCompleted);
-                            downloadDataCompleted?.Invoke(true);
-                        }
-                        else
-                        {
-                            logger.Error($"下载资源失败;message:{Encoding.UTF8.GetString(e.Result)},name:{resourceName}");
-                            UpdateFileState(m, (int)ResourceState.NoStart);
-                            downloadDataCompleted?.Invoke(false);
-                        }
-                    }
-                    else
-                    {
-                        UpdateFileState(m, (int)ResourceState.NoStart);
-                        downloadDataCompleted?.Invoke(false);
-                        if (e.Error == null)
-                            logger.Error($"下载资源失败;message:{Encoding.UTF8.GetString(e.Result)},name:{resourceName}");
-                        else
-                            logger.Error($"下载资源失败;message:{e.Error.Message},name:{resourceName}");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    logger.Error($"下载资源失败;message:{ex.Message},name:{resourceName}");
-                    UpdateFileState(m, (int)ResourceState.NoStart);
-                    downloadDataCompleted?.Invoke(false);
-                }
-            };
-            logger.Info($"开始下载资源：{resourceName}");
-            webClient.DownloadDataAsync(new Uri(string.Format("{0}{1}", Protocol.ProtocolBase.downLoadResource, resourceName)));
-
-#else
-
-            if (Path.IsPathRooted(fileName))
-            {
-                var dir = Path.GetDirectoryName(fileName);
-                if (!Directory.Exists(dir))
-                    Directory.CreateDirectory(dir);
-
-                Util.Helpers.Async.Run(async () => await DAL.DALMessageHelper.UpdateMsgNewFileName(msgId, fileName));
-
-            }
-            else
-            {
-                fileName = Path.Combine(property.CurrentAccount.imgPath, fileName);
-
-                Util.Helpers.Async.Run(async () => await DAL.DALMessageHelper.UpdateMsgNewFileName(msgId, fileName));
-
-            }
-            Task.Run(() =>
-            {
-                try
-                {
-                    var stream = WebRequest.Create(resourceName).GetResponse().GetResponseStream();
-
-                    using (FileStream fs = new FileStream(fileName, FileMode.OpenOrCreate))
-                    {
-                        byte[] buff = new byte[4096];
-                        while (true)
-                        {
-                            int i = stream.Read(buff, 0, 4096);
-                            fs.Write(buff, 0, i);
-
-                            if (i == 0)
-                                break;
-                        }
-                        fs.Flush();
-
-                    }
-                }
-                catch (Exception e)
-                {
-
-                    downloadDataCompleted?.Invoke(false);
-
-                    logger.Error($"下载资源失败;message:{e.Message},name:{resourceName}");
-                }
-                UpdateFileState(m, (int)ResourceState.IsCompleted);
-                downloadDataCompleted?.Invoke(true);
-            });
-#endif
-
-
-        }
-        /// <summary>
-        /// 断点续传
-        /// </summary>
-        /// <param name="resourceName"></param>
-        /// <param name="fileName"></param>
-        /// <param name="fileType"></param>
-        /// <param name="msgId"></param>
-        /// <param name="InitProgress"></param>
-        /// <param name="downloadProgressChanged"></param>
-        /// <param name="downloadDataCompleted"></param>
-        /// <param name="cancellationToken"></param>
-        public void DownloadFileWithResume(string resourceName, string fileName, FileType fileType, Action<long> downloadProgressChanged,
-            Action<bool> downloadDataCompleted, string msgId, Action<long, long> InitProgress=null, System.Threading.CancellationToken? cancellationToken = null)
-        {
-            void UpdateFileState(DB.messageDB message, int fileState)
-            {
-                if (message == null)
-                    return;
-                int i = Util.Helpers.Async.Run(async () => await SDKProperty.SQLiteConn.ExecuteAsync($"update messageDB set fileState={fileState} where Id='{message.Id}'"));
-            }
-            var m = Util.Helpers.Async.Run(async () => await DAL.DALMessageHelper.Get(msgId));
-
-
-            UpdateFileState(m, (int)ResourceState.Working);
-            string sourceUrl = string.Format("{0}{1}", Protocol.ProtocolBase.DownloadFileWithResume, resourceName);
-            string basePath = null;
-            
-            if (!Path.IsPathRooted(fileName))
-            {
-                switch (fileType)
-                {
-                    case FileType.img:
-                        basePath = Path.Combine(SDKProperty.imgPath, property.CurrentAccount.loginId);
-                        if (!Directory.Exists(basePath))
-                            Directory.CreateDirectory(basePath);
-                        break;
-                    case FileType.file:
-                        basePath = Path.Combine(SDKProperty.filePath, property.CurrentAccount.loginId);
-                        if (!Directory.Exists(basePath))
-                            Directory.CreateDirectory(basePath);
-                        break;
-                    default:
-                        break;
-                }
-                fileName = Path.Combine(basePath, fileName);
-            }
-            IMRequest.DownloadFileWithResume(sourceUrl, fileName, InitProgress, downloadProgressChanged, (b)=> {
-                if (b)
-                {
-                    UpdateFileState(m, (int)ResourceState.IsCompleted);
-                }
-                else
-                    UpdateFileState(m, (int)ResourceState.Working);
-                downloadDataCompleted?.Invoke(b);
-
-            }, cancellationToken);
-
-        }
-
+      
         public void GetLaunchFile()
         {
             try
@@ -2064,230 +1117,8 @@ namespace SDKClient
 
         }
 
-        private static object face_lock = new object();
-        private static object myimg_lock = new object();
-        public void DownLoadFacePhoto(string resourceName, Action ErrorCallBack = null, Action SuccessCallBack = null)
-        {
-#if !CUSTOMSERVER
-            System.Threading.CancellationTokenSource source = new System.Threading.CancellationTokenSource();
-
-            WebClient webClient = new WebClient();
-            webClient.DownloadDataCompleted += (s, e) =>
-            {
-
-                source.Cancel();
-                if (!((WebClient)s).ResponseHeaders.GetValue("Content-Type").ToLower().Contains("application/json"))
-                {
-                    if (e.Error == null && e.Cancelled == false && e.Result.Length > 0)
-                    {
-                        lock (face_lock)
-                        {
-                            var data = e.Result;
-                            //var str = Encoding.UTF8.GetString(e.Result);
-                            var filename = Path.Combine(property.CurrentAccount.facePath, resourceName);
-                            if (File.Exists(filename))
-                            {
-                                SuccessCallBack?.Invoke();
-                            }
-                            else if (File.Exists(filename))
-                            {
-                                SuccessCallBack?.Invoke();
-                            }
-                            else
-                            {
-                                File.WriteAllBytes(Path.Combine(property.CurrentAccount.facePath, resourceName), data);
-                                SuccessCallBack?.Invoke();
-                            }
-                        }
-
-                    }
-                }
-                else
-                {
-                    ErrorCallBack?.Invoke();
-                    if (e.Error == null)
-                        logger.Error($"下载头像失败;message:{Encoding.UTF8.GetString(e.Result)},name:{resourceName}");
-                    else
-                        logger.Error($"下载头像失败;message:{e.Error.Message},name:{resourceName}");
-
-                }
-
-            };
-            Task.Run(() =>
-            {
-                string uri = $"{Protocol.ProtocolBase.downLoadResource}{resourceName}";
-                webClient.DownloadDataAsync(new Uri(uri));
-            }).ContinueWith(task =>
-            {
-                Task.Delay(32 * 1000, source.Token).ContinueWith(t =>
-                {
-                    if (t.IsCanceled)
-                    {
-                        //   logger.Error($"图片下载超时检测被取消;{resoureceName}");
-                        return;
-
-                    }
-                    else
-                    {
-                        ErrorCallBack?.Invoke();
-                        logger.Error($"下载头像超时;{resourceName}");
-                    }
-                });
-            });
-#else
-            Task.Run(() =>
-            {
-                try
-                {
-                    string fileName = Path.GetFileName(resourceName);
-                    fileName = Path.Combine(property.CurrentAccount.imgPath, fileName);
-                    var stream = WebRequest.Create(resourceName).GetResponse().GetResponseStream();
-
-                    using (FileStream fs = new FileStream(fileName, FileMode.OpenOrCreate))
-                    {
-                        byte[] buff = new byte[4096];
-                        while (true)
-                        {
-                            int i = stream.Read(buff, 0, 4096);
-                            fs.Write(buff, 0, i);
-
-                            if (i == 0)
-                                break;
-                        }
-                        fs.Flush();
-
-                    }
-                }
-                catch (Exception e)
-                {
-
-                    ErrorCallBack?.Invoke();
-
-                    logger.Error($"下载资源失败;message:{e.Message},name:{resourceName}");
-                }
-
-                SuccessCallBack?.Invoke();
-            });
-#endif
-
-        }
-        public async Task SendImgMessage(string imgFullName, Action<(int isSuccess, string imgMD5, string msgId, string smallId,
-            SDKProperty.ErrorState)> SendComplete,
-            string to, chatType type = chatType.chat, int groupId = 0,
-            System.Threading.CancellationToken? cancellationToken = null, string groupName = null)
-        {
-            System.Threading.CancellationToken token;
-            if (cancellationToken.HasValue)
-                token = cancellationToken.Value;
-
-            string sourcefile = imgFullName;
-            CompressionResult imgResult = null;
-            if (Compressor.IsFileSupported(imgFullName))
-            {
-
-                imgResult = compressor.CompressFileAsync(imgFullName, false);
-                if (!string.IsNullOrEmpty(imgResult.ResultFileName))
-                {
-                    imgFullName = imgResult.ResultFileName;
-                }
-
-            }
-#if CUSTOMSERVER
-            Action<long> uploadProgressChanged = (x) =>
-            {
-
-            };
-            Action<bool, string, SDKProperty.ErrorState> uploadDataCompleted = (b, s, e) =>
-            {
-                if (b)
-                {
-                    string imgId = Instance.SendImgMessage(imgFullName, to, s.Split(new char[] { ',' })[0], s.Split(new char[] { ',' })[1], type, cancellationToken);
-
-                    SendComplete?.Invoke((1, s, imgId, null, e));
-
-                }
-                else
-                {
-                    SendComplete((0, imgFullName, null, null, e));
-                }
-
-            };
-            await Task.Run(() => Instance.UpLoadResource(imgFullName, uploadProgressChanged, uploadDataCompleted, cancellationToken)).ConfigureAwait(false);
-#else
-            await UploadImg(imgFullName, async result =>
-            {
-                string imgId;
-                if (result.isSuccess)
-                {
-                    if (Path.GetExtension(imgFullName).ToLower() == ".gif")//GIF原图发送
-                    {
-                        imgId = SDKProperty.RNGId;
-                        SendComplete?.Invoke((1, result.imgMD5, imgId, null, SDKProperty.ErrorState.None));
-                        imgId = Instance.SendImgMessage(imgFullName, to, result.imgMD5, result.imgMD5, type, cancellationToken, groupName, SessionType.CommonChat, imgId);
-                    }
-                    else
-                    {
-
-                        var bitImgFile = Path.Combine(property.CurrentAccount.imgPath, $"my{result.imgMD5}");
-
-                        if (!File.Exists(bitImgFile))//小图本地不存在
-                        {
-                            var source = new System.Drawing.Bitmap(imgFullName);
-
-                            var With = (int)Math.Min(source.Width, 300);
-                            var h = With * source.Height / source.Width;
-                            var bmp = Util.ImageProcess.GetThumbnail(imgFullName, With, h);
-                            using (MemoryStream ms = new MemoryStream())
-                            {
-                                bmp.Save(ms, System.Drawing.Imaging.ImageFormat.Jpeg);
-
-                                ms.Seek(0, SeekOrigin.Begin);
-                                var bmpArray = ms.ToArray();
-                                lock (myimg_lock)
-                                {
-                                    if (!File.Exists(bitImgFile))
-                                        File.WriteAllBytes(bitImgFile, bmpArray);
-                                }
-
-                            }
-
-                        }
-
-
-                        // var smallresult = Util.Helpers.Async.Run(async () => await Instance.FindResource(bitImgFile));
-                        await UploadImg(bitImgFile, smallresult =>
-                        {
-                            if (smallresult.isSuccess)
-                            {
-                                imgId = SDKProperty.RNGId;
-                                SendComplete((1, result.imgMD5, imgId, smallresult.imgMD5, SDKProperty.ErrorState.None));
-                                imgId = Instance.SendImgMessage(imgFullName, to, result.imgMD5, smallresult.imgMD5, type, cancellationToken, groupName, SessionType.CommonChat, imgId);
-                            }
-                            else
-                            {
-                                SendComplete((0, smallresult.imgMD5, null, null, smallresult.errorState));
-                            }
-                        }, token);
-
-                    }
-                }
-                else
-                {
-
-                    SendComplete((0, result.imgMD5, null, null, result.errorState));
-
-                }
-                var fullname = Path.Combine(Instance.property.CurrentAccount.imgPath, result.imgMD5);
-                if (!File.Exists(fullname))
-                {
-                    var filedata = File.ReadAllBytes(imgFullName);
-                    File.WriteAllBytes(fullname, filedata);
-
-                }
-            }, token);
-#endif
-
-        }
+       
+        
 
 
 
@@ -2553,368 +1384,13 @@ namespace SDKClient
         /// <param name="groupName">如果type=[<see cref="SDKProperty.chatType.groupChat"/>]，需要提供群名称</param>
         /// <param name="imgFullName">缩略图全路径</param>
         /// <returns></returns>
-        public async Task SendFileMessage(string fileFullName, Action<long,long> SetProgressSize,
-            Action<(int isSuccess, string fileMD5, string msgId, string imgId, SDKProperty.ErrorState errorState, Func<string> func)> SendComplete, Action<long> ProgressChanged, string to,
-            chatType type = chatType.chat, System.Threading.CancellationToken? cancellationToken = null, MessageType messageType = MessageType.file, string groupName = null, string imgFullName = null,string msgId=null)
-        {
-            
-            await UploadFile(fileFullName, async result =>
-            {
-                if (result.isSuccess)
-                {
-                    if (!string.IsNullOrEmpty(imgFullName))
-                    {
-                        if (fileFullName.Equals(imgFullName))//图片文件
-                        {
-                            var bitImgFile = Path.Combine(property.CurrentAccount.imgPath, $"my{result.fileMD5}");
-                            if (!File.Exists(bitImgFile))//小图本地不存在
-                            {
-                                var source = new System.Drawing.Bitmap(imgFullName);
-                                var With = (int)Math.Min(source.Width, 300);
-                                var h = With * source.Height / source.Width;
-                                var bmp = Util.ImageProcess.GetThumbnail(imgFullName, With, h);
-                                using (MemoryStream ms = new MemoryStream())
-                                {
-                                    bmp.Save(ms, System.Drawing.Imaging.ImageFormat.Jpeg);
-
-                                    ms.Seek(0, SeekOrigin.Begin);
-                                    var bmpArray = ms.ToArray();
-                                    File.WriteAllBytes(bitImgFile, bmpArray);
-                                }
-                            }
-
-                            await UploadImg(bitImgFile, imgresult =>
-                            {
-                                if (imgresult.isSuccess)
-                                {
-                                    using (var bmp = new System.Drawing.Bitmap(bitImgFile))
-                                    {
-                                        if (string.IsNullOrEmpty(msgId))
-                                            msgId = SDKProperty.RNGId;
-                                        SendComplete?.Invoke((1, result.fileMD5, null, imgresult.imgMD5, SDKProperty.ErrorState.None, () =>
-                                          msgId
-                                        ));
-                                        SDKClient.Instance.SendFileMessage(fileFullName, to, result.fileMD5, result.fileSize, type, groupName, bmp.Width, bmp.Height, imgresult.imgMD5, SessionType.CommonChat, msgId);
-                                    }
-                                    var videoimg = Path.Combine(property.CurrentAccount.imgPath, imgresult.imgMD5);
-                                    if (!File.Exists(videoimg))
-                                    {
-                                        var filedata = File.ReadAllBytes(imgFullName);
-                                        File.WriteAllBytes(videoimg, filedata);
-                                    }
-
-                                }
-                                else
-                                {
-                                    SendComplete?.Invoke((0, result.fileMD5, null, null, result.errorState, null));
-                                }
-
-                            }, cancellationToken);
-
-                        }
-                        else
-                        {
-
-                            //视频缩略图
-                            if (Compressor.IsFileSupported(imgFullName))
-                            {
-                                CompressionResult imgResult = null;
-                                imgResult = compressor.CompressFileAsync(imgFullName, false);
-                                if (!string.IsNullOrEmpty(imgResult.ResultFileName))
-                                {
-                                    imgFullName = imgResult.ResultFileName;
-                                }
-
-                            }
-                            await UploadImg(imgFullName, imgresult =>
-                            {
-                                if (imgresult.isSuccess)
-                                {
-                                    using (var bmp = new System.Drawing.Bitmap(imgFullName))
-                                    {
-                                        // string msgId = SDKClient.Instance.SendFileMessage(fileFullName, to, result.fileMD5, result.fileSize, type, groupName, bmp.Width, bmp.Height, imgresult.imgMD5);
-
-                                        //SendComplete?.Invoke((1, result.fileMD5, null, imgresult.imgMD5, SDKProperty.ErrorState.None, () =>
-                                        // SDKClient.Instance.SendFileMessage(fileFullName, to, result.fileMD5, result.fileSize, type, groupName, bmp.Width, bmp.Height, imgresult.imgMD5)
-                                        //));
-                                        if (string.IsNullOrEmpty(msgId))
-                                            msgId = SDKProperty.RNGId;
-                                        SendComplete?.Invoke((1, result.fileMD5, null, imgresult.imgMD5, SDKProperty.ErrorState.None, () =>
-                                          msgId
-                                        ));
-                                        SDKClient.Instance.SendFileMessage(fileFullName, to, result.fileMD5, result.fileSize, type, groupName, bmp.Width, bmp.Height, imgresult.imgMD5, SessionType.CommonChat, msgId);
-                                    }
-
-                                    var videoimg = Path.Combine(property.CurrentAccount.imgPath, imgresult.imgMD5);
-                                    if (!File.Exists(videoimg))
-                                    {
-                                        var filedata = File.ReadAllBytes(imgFullName);
-                                        File.WriteAllBytes(videoimg, filedata);
-                                    }
-
-
-                                }
-                                else
-                                {
-                                    SendComplete?.Invoke((0, result.fileMD5, null, null, result.errorState, null));
-                                }
-
-                            }, cancellationToken);
-                        }
-                    }
-                    else
-                    {
-                        // string msgId = SDKClient.Instance.SendFileMessage(fileFullName, to, result.fileMD5, result.fileSize, type, groupName);
-                        if (string.IsNullOrEmpty(msgId))
-                            msgId = SDKProperty.RNGId;
-                        SendComplete?.Invoke((1, result.fileMD5, null, null, SDKProperty.ErrorState.None, () =>
-                          msgId
-                        ));
-                        
-                        //SendComplete?.Invoke((1, result.fileMD5, null, null, SDKProperty.ErrorState.None, () =>
-                        SDKClient.Instance.SendFileMessage(fileFullName, to, result.fileMD5, result.fileSize, type, groupName, 0, 0, "", SessionType.CommonChat, msgId);
-                        //));
-
-                    }
-                }
-                else
-                {
-                    SendComplete?.Invoke((0, result.fileMD5, null, null, result.errorState, null));
-                    if (string.IsNullOrEmpty(msgId))
-                        msgId = SDKProperty.RNGId;
-                    if(result.errorState!= ErrorState.Cancel)
-                        SDKClient.Instance.SendFiletoDB(fileFullName, to, result.fileMD5, result.fileSize, type, groupName, 0, 0, "", SessionType.CommonChat, msgId);
-                }
-            },(f,t) =>
-            {
-                SetProgressSize?.Invoke(f,t);
-            }, c =>
-            {
-                ProgressChanged?.Invoke(c);
-            }
-            , cancellationToken);
-        }
-        /// <summary>
-        /// 发送小视频消息
-        /// </summary>
-        /// <param name="fileFullName">视频文件全路径</param>
-        /// <param name="recordTime">时长</param>
-        /// <param name="imgFullName">缩略图全路径</param>
-        /// <param name="SetProgressSize">设置文件大小</param>
-        /// <param name="SendComplete">发送完毕CB</param>
-        /// <param name="ProgressChanged">进度条CB</param>
-        /// <param name="to">目标ID</param>
-        /// <param name="type">聊天类型<see cref="SDKProperty.chatType"/></param>
-        /// <param name="cancellationToken">取消结构体对象</param>
-        /// <param name="messageType">消息类型<see cref="SDKProperty.MessageType"/></param>
-        /// <param name="groupName">如果type=[<see cref="SDKProperty.chatType.groupChat"/>]，需要提供群名称</param>
-        /// <returns></returns>
-        public async Task SendSmallVideoMessage(string fileFullName, string recordTime, string imgFullName, Action<long,long> SetProgressSize, Action<(int isSuccess, string videoMD5, string msgId, string imgId, SDKProperty.ErrorState errorState)> SendComplete, Action<long> ProgressChanged, string to,
-           chatType type = chatType.chat, System.Threading.CancellationToken? cancellationToken = null, MessageType messageType = MessageType.smallvideo, string groupName = null)
-        {
-
-            await UploadFile(fileFullName, async result =>
-            {
-
-                if (result.isSuccess)
-                {
-                    await UploadImg(imgFullName, imgresult =>
-                    {
-                        if (imgresult.isSuccess)
-                        {
-                            using (var source = new System.Drawing.Bitmap(imgFullName))
-                            {
-                                string msgId = SDKProperty.RNGId;
-                                SendComplete?.Invoke((1, result.fileMD5, msgId, imgresult.imgMD5, SDKProperty.ErrorState.None));
-                                msgId = SDKClient.Instance.SendSmallVideoMessage(fileFullName, to, recordTime,
-                                    result.fileMD5, imgresult.imgMD5, source.Width, source.Height, result.fileSize, type, groupName, SessionType.CommonChat, msgId);
-                            }
-                            var videoimg = Path.Combine(property.CurrentAccount.imgPath, imgresult.imgMD5);
-                            if (!File.Exists(videoimg))
-                            {
-                                var filedata = File.ReadAllBytes(imgFullName);
-                                File.WriteAllBytes(videoimg, filedata);
-
-                            }
-
-
-                        }
-                        else
-                        {
-                            SendComplete?.Invoke((0, result.fileMD5, null, null, result.errorState));
-                        }
-                    }, cancellationToken);
-
-                }
-                else
-                {
-                    SendComplete?.Invoke((0, result.fileMD5, null, null, result.errorState));
-                }
-            }, (from,t) => SetProgressSize?.Invoke(from,t), c => ProgressChanged?.Invoke(c), cancellationToken);
-
-        }
-
-
-        public static async Task UploadImg(string imgFullName,
-           Action<(bool isSuccess, string imgMD5, ErrorState errorState)> SendComplete,
-            System.Threading.CancellationToken? cancellationToken)
-        {
-
-            var imgresult = await SDKClient.Instance.FindResource(imgFullName);
-            if (imgresult.existed)
-            {
-
-                SendComplete?.Invoke((true, imgresult.resourceId, SDKProperty.ErrorState.None));
-            }
-            else
-            {
-
-                Action<bool, string, SDKProperty.ErrorState> uploadDataCompleted = (b, s, e) =>
-                {
-                    if (!b)
-                    {
-                        SendComplete?.Invoke((false, s, e));
-
-                    }
-                    else
-                    {
-
-                        SendComplete?.Invoke((true, s, SDKProperty.ErrorState.None));
-
-                    }
-                };
-
-                SDKClient.Instance.UpLoadResource(imgFullName, null, uploadDataCompleted, cancellationToken);
-            }
-
-        }
-        public static async Task UploadFile(string fileFullName,
-          Action<(bool isSuccess, string fileMD5, long fileSize, ErrorState errorState)> SendComplete,
-           Action<long,long> SetProgressSize, Action<long> UploadProgressChanged,
-           System.Threading.CancellationToken? cancellationToken)
-        {
-
-            //var result = await SDKClient.Instance.FindResource(fileFullName);
-            var result = await SDKClient.Instance.IsFileExist(fileFullName);
-            if (result.isExist)
-            {
-                SendComplete?.Invoke((true, result.fileCode, result.fileSize, SDKProperty.ErrorState.None));
-            }
-            else
-            {
-                ResourceManifest resourceManifest = new ResourceManifest()
-                {
-                    MD5 = result.fileCode,
-                    Size = result.fileSize,
-                    State = (int)SDKProperty.ResourceState.Working
-                };
-                await DAL.DALResourceManifestHelper.InsertOrUpdateItem(resourceManifest);
-                Action<bool, string, SDKProperty.ErrorState> uploadDataCompleted = async (b, s, e) =>
-                {
-                    if (!b)
-                    {
-#if !CUSTOMSERVER
-
-                        await DAL.DALResourceManifestHelper.UpdateResourceState(s, ResourceState.Working);
-#endif
-
-                        SendComplete?.Invoke((false, s, 0, e));
-
-                    }
-                    else
-                    {
-#if !CUSTOMSERVER
-                        await DAL.DALResourceManifestHelper.UpdateResourceState(s, ResourceState.IsCompleted);
-#endif
-                        FileInfo info = new FileInfo(fileFullName);
-                        SendComplete?.Invoke((true, s, info.Length, SDKProperty.ErrorState.None));
-
-                    }
-                };
-#if CUSTOMSERVER
-                SDKClient.Instance.UpLoadResource(fileFullName, UploadProgressChanged, uploadDataCompleted, cancellationToken);
-#else
-                
-                
-              
-                if (result.blocks != null&&result.blocks.Any())
-                {
-                    SetProgressSize?.Invoke(result.blocks.Count*result.blocks[0].blockSize, result.fileSize);
-                    SDKClient.Instance.ResumeUpload(fileFullName, result.fileCode, UploadProgressChanged, uploadDataCompleted, result.blocks.Select(b => b.blockNum).ToList(), cancellationToken);
-                }
-                else
-                {
-                    SetProgressSize?.Invoke(0, result.fileSize);
-                    SDKClient.Instance.ResumeUpload(fileFullName, result.fileCode, UploadProgressChanged, uploadDataCompleted, null, cancellationToken);
-                }
-
-#endif
-
-            }
-
-        }
+       
+       
         public async void UpdateMsgFileName(string msgId, string fileName)
         {
             await DAL.DALMessageHelper.UpdateMsgNewFileName(msgId, fileName);
         }
-        public string SendRetractMessage(string msgId, string to, chatType type = chatType.chat, int groupId = 0, SDKProperty.RetractType retractType = RetractType.Normal, SDKProperty.SessionType sessionType = SessionType.CommonChat, message.ReceiverInfo recverInfo = null)
-        {
-            MessagePackage package = new MessagePackage()
-            {
-                from = property.CurrentAccount.userID.ToString(),
-                to = to,
-                id = SDKProperty.RNGId
-            };
-            package.data = new message()
-            {
-                body = new retractBody()
-                {
-                    retractId = msgId,
-                    retractType = (int)retractType
-
-                },
-                senderInfo = new message.SenderInfo()
-                {
-                    photo = property.CurrentAccount.photo,
-                    userName = property.CurrentAccount.userName
-                },
-                receiverInfo = recverInfo,
-                subType = "retract",
-                chatType = to == property.CurrentAccount.userID.ToString() ? (int)SessionType.FileAssistant : (int)sessionType,
-                type = type == chatType.chat ? nameof(chatType.chat) : nameof(chatType.groupChat)
-            };
-            if (type == chatType.groupChat)
-            {
-                package.data.groupInfo = new message.msgGroup()
-                {
-                    groupId = groupId
-                };
-            }
-
-            package.Send(ec);
-            return package.id;
-        }
-        public async Task<string> SendSyncMsgStatus(int roomId, int readNum, string lastMsgID, SDKProperty.chatType chatType)
-        {
-            return await GetData<string>(() =>
-            {
-                SyncMsgStatusPackage package = new SyncMsgStatusPackage();
-                package.ComposeHead(roomId.ToString(), property.CurrentAccount.userID.ToString());
-                package.data = new SyncMsgStatusPackage.Data()
-                {
-                    lastMsgID = lastMsgID,
-                    readNum = readNum
-                };
-                if (chatType == chatType.chat)
-                    package.data.partnerId = roomId;
-                else
-                    package.data.groupId = roomId;
-
-                package.Send(ec);
-                return package.id;
-
-            }).ConfigureAwait(false);
-        }
+       
         public string GetUser(int userId)
         {
 
@@ -2986,108 +1462,8 @@ namespace SDKClient
                 return await WebAPICallBack.CheckUserIsOnline(userId);
             });
         }
-        public GetUserPrivacySettingPackage GetUserPrivacySetting(int userId, bool isImmediately = false)
-        {
-            GetUserPrivacySettingPackage package = new GetUserPrivacySettingPackage();
-            package.ComposeHead(property.ServerJID, property.CurrentAccount.userID.ToString());
-            package.data = new GetUserPrivacySettingPackage.Data()
-            {
-                userId = userId
-            };
-            var userPrivacyPackage = IMRequest.GetUserPrivacySettingPackage(package);
-            if (userPrivacyPackage != null && !isImmediately && userPrivacyPackage.code == 0)
-            {
-                try
-                {
-                    var cmd = CommmandSet.FirstOrDefault(c => c.Name == userPrivacyPackage.api);
-                    cmd?.ExecuteCommand(ec, userPrivacyPackage);//日志及入库操作
-
-                }
-                catch (Exception ex)
-                {
-                    logger.Error($"获取用户隐私信息数据处理异常：error:{ex.Message},stack:{ex.StackTrace};\r\ncontent:{Util.Helpers.Json.ToJson(userPrivacyPackage)}");
-
-                    System.Threading.Interlocked.CompareExchange(ref SDKClient.Instance.property.CanHandleMsg, 2, 1);
-                    logger.Info("CanHandleMsg 值修改为:2");
-                }
-            }
-            //package.Send(ec).id;
-            return userPrivacyPackage;
-        }
-        /// <summary>
-        /// 更新用户设置
-        /// </summary>
-        /// <param name="option"><see cref="UpdateUserOption"/>用户设置项</param>
-        /// <param name="content">设置项的值</param>
-        /// <returns></returns>
-        public string UpdateMyself(UpdateUserOption option, string content)
-        {
-
-            var t = Task.Run(async () =>
-            {
-                UpdateuserPackage package = new UpdateuserPackage();
-                package.ComposeHead(property.ServerJID, property.CurrentAccount.userID.ToString());
-                package.data = new UpdateuserPackage.Data()
-                {
-                    userId = property.CurrentAccount.userID,
-                    updateType = (int)option,
-
-                    content = content
-
-                };
-                if (option == UpdateUserOption.修改头像)
-                {
-                    var result = await FindResource(content);
-                    if (!string.IsNullOrEmpty(content))
-                    {
-                        package.data.content = result.resourceId;
-                        if (!result.existed)
-                        {
-                            UpLoadResource(content, null, null);
-                        }
-
-                    }
-                }
-                return package.Send(ec).id;
-            }).ConfigureAwait(false);
-            return t.GetAwaiter().GetResult();
-        }
-        /// <summary>
-        /// 修改个人资料多项
-        /// </summary>
-        /// <param name="data"></param>
-        /// <returns></returns>
-        public string UpdateUserDetail(UpdateUserDetailPackage.Data data)
-        {
-            var t = Task.Run(async () =>
-            {
-                UpdateUserDetailPackage package = new UpdateUserDetailPackage();
-                package.ComposeHead(property.ServerJID, property.CurrentAccount.userID.ToString());
-                package.data = data;
-
-                if (!string.IsNullOrEmpty(data.photo))
-                {
-                    var result = await FindResource(data.photo);
-
-                    package.data.photo = result.resourceId;
-                    if (!result.existed)
-                    {
-                        UpLoadResource(data.photo, null, null);
-                    }
-
-                }
-
-                return package.Send(ec).id;
-            }).ConfigureAwait(false);
-            return t.GetAwaiter().GetResult();
-        }
-        /// <summary>
-        /// 设置好友备注
-        /// </summary>
-        /// <param name="option"></param>
-        /// <param name="content"></param>
-        /// <param name="friendId"></param>
-        /// <returns></returns>
+     
+      
         public string UpdateFriendSet(UpdateFriendSetPackage.FriendSetOption option, string content, int friendId)
         {
 
@@ -3908,34 +2284,12 @@ namespace SDKClient
             return Util.Helpers.Async.Run(async () => await DAL.DALMessageHelper.GetMsgEntity(roomId, msgId, loadCount, mt, dateTime, isForword, showDelMsg).ConfigureAwait(false));
 #endif
         }
-        /// <summary>
-        /// 更新消息为已读
-        /// </summary>
-        /// <param name="roomId">窗体ID</param>
-        /// <param name="roomType">窗体类型，0：chat;1:groupchat</param>
-        /// <param name="isRead">已读标志：true:已读；false:未读</param>
-        public async void UpdateHistoryMsgIsReaded(int roomId, int roomType, bool isRead = true, int unReadCount = 0, bool sameToOther = true)
-        {
-            if (unReadCount > 0)
-                await DAL.DALMessageHelper.UpdateMsgIsRead(roomId, roomType);
+     
+      
 
-            await Instance.SendSyncMsgStatus(roomId, 2, string.Empty,
-                    roomType == 1 ? SDKProperty.chatType.groupChat : SDKProperty.chatType.chat);
-
-        }
-
-        public void UpdateHistoryMsgIsReaded(string msgId)
-        {
-            Util.Helpers.Async.Run(async () => await DAL.DALMessageHelper.UpdateMsgIsRead(msgId));
-        }
-        public void UpdateHistoryMsgIsHidden(string msgId)
-        {
-            Util.Helpers.Async.Run(async () => await DAL.DALMessageHelper.UpdateMsgHidden(msgId));
-        }
-        public void UpdateHistoryMsgContent(string msgId, string content, SDKProperty.MessageType messageType = SDKProperty.MessageType.notification)
-        {
-            Util.Helpers.Async.Run(async () => await DAL.DALMessageHelper.UpdateMsgContent(msgId, content, messageType));
-        }
+       
+      
+        
         /// <summary>
         /// 接收端取消接收离线消息，接收端调用
         /// </summary>
@@ -4027,79 +2381,9 @@ namespace SDKClient
             return result;
 
         }
-        public string CreateGroup(List<int> items, string photo)
-        {
-            var t = Task.Run(async () =>
-            {
-                var result = await FindResource(photo).ConfigureAwait(false);
-                CreateGroupPackage package = new CreateGroupPackage();
-                package.ComposeHead(property.ServerJID, property.CurrentAccount.userID.ToString());
-                package.data = new CreateGroupPackage.Data()
-                {
-                    items = items,
-                    groupPhoto = result.resourceId
-                };
-                try
-                {
-                    if (!result.existed)
-                    {
-                        UpLoadResource(photo, null, (b, s, e) =>
-                        {
-                            package.Send(ec);
+       
 
-                        });
-
-                    }
-                    else
-                    {
-                        package.Send(ec);
-
-                    }
-                }
-                catch (Exception ex)
-                {
-
-                    logger.Error(ex.Message);
-                }
-                return package.id;
-
-            }).ConfigureAwait(false);
-            return t.GetAwaiter().GetResult();
-
-        }
-
-        public string UpdateGroup(int groupId, SetGroupOption option, string content)
-        {
-            var t = Task.Run(async () =>
-            {
-                UpdateGroupPackage package = new UpdateGroupPackage();
-                package.ComposeHead(property.ServerJID, property.CurrentAccount.userID.ToString());
-                package.data = new UpdateGroupPackage.Data()
-                {
-                    userId = property.CurrentAccount.userID,
-                    groupId = groupId,
-                    setType = (int)option,
-                    content = content
-
-                };
-                if (option == SetGroupOption.修改群头像)
-                {
-                    var result = await FindResource(content);
-                    if (!string.IsNullOrEmpty(content))
-                    {
-                        package.data.content = result.resourceId;
-                        if (!result.existed)
-                        {
-                            UpLoadResource(content, null, null);
-                        }
-
-                    }
-                }
-                return package.Send(ec).id;
-            }).ConfigureAwait(false);
-            return t.GetAwaiter().GetResult();
-
-        }
+       
         public string InviteJoinGroup(InviteJoinGroupPackage.Data data, bool isFoward = false)
         {
             InviteJoinGroupPackage package = new InviteJoinGroupPackage();
@@ -4417,16 +2701,7 @@ namespace SDKClient
 
             return await task.Task.ConfigureAwait(false);
         }
-        public async void RetrySendMessageByMsgId(string msgId)
-        {
-            var db = await DAL.DALMessageHelper.Get(msgId);
-            if (db != null)
-            {
-                
-                MessagePackage package = Util.Helpers.Json.ToObject<MessagePackage>(db.Source);
-                package.Send(ec);
-            }
-        }
+       
 
 #endregion
 #region 客服接口
@@ -4813,11 +3088,6 @@ namespace SDKClient
             return package.Send(ec).id;
         }
 #endregion
-
-        public GetSensitiveWordsResponse GetBadWordUpdate(string lastTime)
-        {
-            return WebAPICallBack.GetBadWordUpdate(lastTime);
-        }
 
     }
 }

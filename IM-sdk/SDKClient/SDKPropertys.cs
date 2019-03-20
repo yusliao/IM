@@ -409,7 +409,8 @@ namespace SDKClient
             NoStart =0,
             Working=1,
             IsCompleted=2,
-            IsCancelled=3
+            IsCancelled=3,
+            Failed
         }
         public enum MessageDisturbOption
         {

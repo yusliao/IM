@@ -19,7 +19,7 @@
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
     <OutputPath>..\..\output\debug\</OutputPath>
-    <DefineConstants>TRACE;DEBUG;Debug,CUSTOMSERVER</DefineConstants>
+    <DefineConstants>TRACE;DEBUG;Debug</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
@@ -139,9 +139,9 @@
   <ItemGroup>
     <Compile Include="Command\CustomOption\CSSyncMsgStatus_cmd.cs" />
     <Compile Include="Command\CustomOption\CustomExchange_cmd.cs" />
-    <Compile Include="Controllers\BaseController.cs" />
     <Compile Include="Controllers\MessageController.cs" />
     <Compile Include="Controllers\OffLineMsgController.cs" />
+    <Compile Include="Controllers\ResourceController.cs" />
     <Compile Include="DAL\DALResourceManifestHelper.cs" />
     <Compile Include="DB\OffLineMsgTask.cs" />
     <Compile Include="DB\ResourceManifest.cs" />

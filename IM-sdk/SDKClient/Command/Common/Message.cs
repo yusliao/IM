@@ -52,10 +52,10 @@ namespace SDKClient.Command
                             source.Item1.Cancel();
                             var message = source.Item2 as MessagePackage;
                             if (message.data.type == nameof(SDKProperty.chatType.chat))
-                                SDKClient.Instance.OnSendConfirm(message.to.ToInt(), false, package,package.time.Value);
+                                SDKClient.Instance.OnSendConfirm(message.to.ToInt(), package,package.time.Value);
                             else
                             {
-                                SDKClient.Instance.OnSendConfirm(message.data.groupInfo.groupId, true, package,package.time.Value);
+                                SDKClient.Instance.OnSendConfirm(message.data.groupInfo.groupId, package,package.time.Value);
                             }
                         }
                         Util.Helpers.Async.Run(async () => await DAL.DALMessageHelper.UpdateSendMsgTime(package));
@@ -155,10 +155,10 @@ namespace SDKClient.Command
 
                 //p.error = $"发消息权限已被封停，剩余解封时间：{days}天{hours}小时{minutes}分钟，若有疑问请联系客服：{GlobalConfig.CompanyPhone}";
                 if (p.data.type == nameof(SDKProperty.chatType.chat))
-                    SDKClient.Instance.OnSendConfirm(p.to.ToInt(), false, p,DateTime.Now);
+                    SDKClient.Instance.OnSendConfirm(p.to.ToInt(), p,DateTime.Now);
                 else
                 {
-                    SDKClient.Instance.OnSendConfirm(p.to.ToInt(), true, p, DateTime.Now);
+                    SDKClient.Instance.OnSendConfirm(p.to.ToInt(), p, DateTime.Now);
                 }
                 return;
             }
@@ -207,10 +207,10 @@ namespace SDKClient.Command
                             Task.Run(async () => await DAL.DALMessageHelper.UpdateMsgSendFailed(package.id));
 #endif
                             if (messagePackage.data.type == nameof(SDKProperty.chatType.chat))
-                                SDKClient.Instance.OnSendFaile(package.to.ToInt(),false, package.id);
+                                SDKClient.Instance.OnSendFaile(package.to.ToInt(), package.id);
                             else
                             {
-                                SDKClient.Instance.OnSendFaile(messagePackage.data.groupInfo.groupId,true, package.id);
+                                SDKClient.Instance.OnSendFaile(messagePackage.data.groupInfo.groupId, package.id);
                             }
                         }
                     },TaskContinuationOptions.OnlyOnRanToCompletion);
@@ -236,10 +236,10 @@ namespace SDKClient.Command
                    
                     System.Threading.Thread.Sleep(1000);//竞态情况下，让Send先出栈
                     if (messagePackage.data.type == nameof(SDKProperty.chatType.chat))
-                        SDKClient.Instance.OnSendFaile(package.to.ToInt(),false, package.id);
+                        SDKClient.Instance.OnSendFaile(package.to.ToInt(), package.id);
                     else
                     {
-                        SDKClient.Instance.OnSendFaile(messagePackage.data.groupInfo.groupId,true, package.id);
+                        SDKClient.Instance.OnSendFaile(messagePackage.data.groupInfo.groupId, package.id);
                     }
                 }
             }
