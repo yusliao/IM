@@ -49,7 +49,7 @@ namespace SDKClient
        
         private static bool needStop = false;
         public readonly SDKProperty property = new SDKProperty();//SDK挂载的属性集对象
-        public static SDKClient Instance { get; } = new SDKClient();
+        public static readonly SDKClient Instance  = new SDKClient();
 
         
         //心跳定时器
@@ -198,22 +198,8 @@ namespace SDKClient
             }
         }
 
-       
-       
-
         private SDKClient()
         {
-            //#region 通讯组件配置
-            //ec.Initialize(new RecvFilter2());
-            //ec.NewPackageReceived += Ec_NewPackageReceived;
-            //ec.Error += ec_Error;
-            //ec.Connected += ec_Connected;
-            //ec.Closed += ec_Closed;
-
-            //#endregion；
-           
-
-
             #region MEF配置
             MyComposePart();
             #endregion
@@ -309,58 +295,54 @@ namespace SDKClient
             if (!needStop && property.RaiseConnEvent)
             {
 
-                try
+                //没有开始连接，发送连接请求,过滤掉重复请求
+                if (System.Threading.Interlocked.CompareExchange(ref property.ConnState, 1, 0) == 0)
                 {
-
-
-
-                    //没有开始连接，发送连接请求
-                    if (System.Threading.Interlocked.CompareExchange(ref property.ConnState, 1, 0) == 0)
+                    ConnState?.BeginInvoke(this, false, null, null);
+                    property.RaiseConnEvent = false;
+                    if (ec.IsConnected)//已连接断开重新连接
+                        SendLogout(LogoutModel.Logout_self);
+                    if (property.remotePoint == null)
                     {
-
-                        if (ec.IsConnected)//已连接断开重新连接
-                            SendLogout(LogoutModel.Logout_self);
-                        if (property.remotePoint == null)
+                        if (property.State > ServerState.NotStarted)
                         {
-                            if (property.State > ServerState.NotStarted)
-                            {
 
-                                property.remotePoint = new IPEndPoint(property.IMServerIP, ProtocolBase.IMPort);
+                            property.remotePoint = new IPEndPoint(property.IMServerIP, ProtocolBase.IMPort);
 
-                            }
-                            else
-                            {
-                                property.remotePoint = new System.Net.IPEndPoint(property.QrServerIP, ProtocolBase.QrLoginPort);
-
-                            }
                         }
-                        // timer = null;
-                        logger.Info($"开始重连: {property.remotePoint.ToString()}");
-                        ConnState?.BeginInvoke(this, false, null, null);
+                        else
+                        {
+                            property.remotePoint = new System.Net.IPEndPoint(property.QrServerIP, ProtocolBase.QrLoginPort);
+
+                        }
+                    }
+
+                    logger.Info($"开始重连: {property.remotePoint.ToString()}");
+                    try
+                    {
                         InitSocketAsync();
-                        var success = await ec.ConnectAsync(property.remotePoint).ConfigureAwait(false);
-                        if (!success)//连接失败
+                        bool success = false;
+                        do
                         {
-                            logger.Error($"连接失败:{property.CurrentAccount.Session}");
-                            //延迟10秒自动重连
-                            Task.Delay(10 * 1000).ContinueWith((t) =>
+                            success = await ec.ConnectAsync(property.remotePoint).ConfigureAwait(false);
+                            if (!success)//连接失败
                             {
-                                System.Threading.Interlocked.Exchange(ref property.ConnState, 0);
-                                StartReConn();
-                            });
-                        }
+                                logger.Error($"连接失败:{property.CurrentAccount.Session}");
+                                //延迟10秒自动重连
+                                await Task.Delay(10 * 1000);
+                            }
+                        } while (!success && !needStop);
                         System.Threading.Interlocked.Exchange(ref property.ConnState, 0);
-
-
-
-
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.Error(ex.Message);
+                        System.Threading.Interlocked.Exchange(ref property.ConnState, 0);
+                        property.RaiseConnEvent = true;
                     }
                 }
-                catch (Exception)
-                {
+                
 
-                    throw;
-                }
             }
 
         }
@@ -373,8 +355,6 @@ namespace SDKClient
         {
             //   System.Threading.Interlocked.Exchange(ref property.ConnState, 0);
             logger.Info("连接成功");
-
-#if !CUSTOMSERVER
 
             var obj = sender as EasyClientBase;
             if (SDKProperty.P2PServer.ServerState == SuperSocket.SocketBase.ServerState.NotInitialized)
@@ -391,7 +371,7 @@ namespace SDKClient
                 }
 
             }
-#endif
+
             SendConn();
             if (timer == null)
             {
@@ -405,11 +385,10 @@ namespace SDKClient
                             //CommandBase.SendHeart(ec);
 
                         }
-#if CUSTOMSERVER
-                        timer.Change(5 * 1000, System.Threading.Timeout.Infinite);
-#else
+
+
                         timer?.Change(30 * 1000, System.Threading.Timeout.Infinite);
-#endif
+
                     }
                     else
                     {
@@ -529,8 +508,14 @@ namespace SDKClient
             var result = await ec.ConnectAsync(property.remotePoint);
             return result;
         }
-        bool _isQuickLogon;
-        string _token;
+        bool _isQuickLogon; //当前登陆
+        string _token; //登陆的token
+        /// <summary>
+        /// 扫码登陆
+        /// </summary>
+        /// <param name="isQuickLogon">是否快速登陆</param>
+        /// <param name="token">快速登陆用户的token</param>
+        /// <returns></returns>
         public async Task<bool> StartQRLoginAsync(bool isQuickLogon = false, string token = "")
         {
             _isQuickLogon = isQuickLogon;
@@ -549,16 +534,14 @@ namespace SDKClient
             System.Net.IPEndPoint iPEndPoint = new System.Net.IPEndPoint(property.QrServerIP, ProtocolBase.QrLoginPort);
             property.CurrentAccount.LoginMode = LoginMode.Scan;
             property.m_StateCode = ServerStateConst.Initializing;
-            property.RaiseConnEvent = true;
+            property.RaiseConnEvent = false;//显示的关闭重连开关
             if (ec.IsConnected)
             {
                 if (iPEndPoint.ToString() == property.remotePoint.ToString())
                     SendConn();
                 else
                 {
-                    //从其他方式切过来，关闭重连信号
-                    property.RaiseConnEvent = false;
-                    await ec.Close();
+                    InitSocketAsync();
                     return await CreateConn(iPEndPoint);
                 }
                 return true;
@@ -722,218 +705,7 @@ namespace SDKClient
      
        
         #region 公开的功能
-      
-
-        
-        /// <summary>
-        /// 发送个人名片
-        /// </summary>
-        /// <param name="name">发送的目标名片用户名</param>
-        /// <param name="photo">发送的目标名片图像</param>
-        /// <param name="phone">发送的目标名片电话号码</param>
-        /// <param name="userid">发送的目标名片用户Id</param>
-        /// <param name="to">接受者Id</param>
-        /// <param name="userIds">被@对象集合,@ALL定义为值-1</param>
-        /// <param name="type">聊天类型</param>
-        /// <param name="groupName">群名称</param>
-        /// <param name="sessionType"></param>
-        /// <param name="receiverInfo"></param>
-        /// <returns>消息Id</returns>
-        public async Task<string> SendPersonCard(string name, string photo, string phone, int userid, string to, IList<int> userIds = null, chatType type = chatType.chat, string groupName = null, SDKProperty.SessionType sessionType = SessionType.CommonChat, message.ReceiverInfo receiverInfo = null)
-        {
-            return await GetData(() =>
-            {
-                MessagePackage package = new MessagePackage();
-                package.ComposeHead(to, property.CurrentAccount.userID.ToString());
-
-                package.data = new message()
-                {
-                    body = new UserCardBody()
-                    {
-                        name = name,
-                        phone = phone,
-                        photo = photo,
-                        userId = userid
-                    },
-                    senderInfo = new message.SenderInfo()
-                    {
-                        photo = property.CurrentAccount.photo,
-                        userName = property.CurrentAccount.userName ?? property.CurrentAccount.loginId
-                    },
-                    receiverInfo = receiverInfo,
-                    chatType = to == property.CurrentAccount.userID.ToString() ? (int)SessionType.FileAssistant : (int)sessionType,
-                    subType = "userCard",
-                    tokenIds = userIds,
-                    type = type == chatType.chat ? nameof(chatType.chat) : nameof(chatType.groupChat)
-                };
-                if (type == chatType.groupChat)
-                {
-                    package.data.groupInfo = new message.msgGroup()
-                    {
-                        groupId = to.ToInt(),
-                        groupName = groupName
-                    };
-                }
-                try
-                {
-                    package.Send(ec);
-                }
-                catch (Exception ex)
-                {
-                    logger.Error($"发送失败:{ex.Message}");
-                    return null;
-                }
-
-
-
-                return package.id;
-            }).ConfigureAwait(false);
-        }
-
-        /// <summary>
-        /// 发送手机端分享的消息
-        /// </summary>
-        /// <param name="foreignDynBody"></param>
-        /// <param name="to"></param>
-        /// <param name="type"></param>
-        /// <param name="groupName"></param>
-        /// <param name="sessionType"></param>
-        /// <param name="receiverInfo"></param>
-        /// <returns></returns>
-        public async Task<string> SendForeignDynMsg(object foreignDynBody, string to, chatType type = chatType.chat, string groupName = null, SDKProperty.SessionType sessionType = SessionType.CommonChat, message.ReceiverInfo receiverInfo = null)
-        {
-            return await GetData(() =>
-            {
-                MessagePackage package = new MessagePackage();
-                package.ComposeHead(to, property.CurrentAccount.userID.ToString());
-
-                package.data = new message()
-                {
-                    body = foreignDynBody,
-                    senderInfo = new message.SenderInfo()
-                    {
-                        photo = property.CurrentAccount.photo,
-                        userName = property.CurrentAccount.userName ?? property.CurrentAccount.loginId
-                    },
-                    receiverInfo = receiverInfo,
-                    chatType = to == property.CurrentAccount.userID.ToString() ? (int)SessionType.FileAssistant : (int)sessionType,
-                    subType = "foreignDyn",
-                    type = type == chatType.chat ? nameof(chatType.chat) : nameof(chatType.groupChat)
-                };
-                if (type == chatType.groupChat)
-                {
-                    package.data.groupInfo = new message.msgGroup()
-                    {
-                        groupId = to.ToInt(),
-                        groupName = groupName
-                    };
-                }
-                try
-                {
-                    package.Send(ec);
-                }
-                catch (Exception ex)
-                {
-                    logger.Error($"发送失败:{ex.Message}");
-                    return null;
-                }
-
-
-
-                return package.id;
-            }).ConfigureAwait(false);
-        }
-        /// <summary>
-        /// 设置陌生人免打扰
-        /// </summary>
-        /// <param name="userId"></param>
-        /// <param name="strangerId"></param>
-        /// <param name="isNotdisturb">是否消息免打扰 1是 0否</param>
-        /// <returns></returns>
-        public async Task<bool> SetStrangerDoNotDisturb(int userId, int strangerId, int isNotdisturb)
-        {
-            return await DAL.DALStrangerOptionHelper.SetStrangerdoNotDisturb(strangerId, isNotdisturb);
-            //SetStrangerDoNotDisturbPackage package = new SetStrangerDoNotDisturbPackage();
-            //package.ComposeHead(property.ServerJID, property.CurrentAccount.userID.ToString());
-            //package.data = new SetStrangerDoNotDisturbPackage.Data()
-            //{
-            //    userId = userId,
-            //    strangerId = strangerId,
-            //    isNotdisturb = isNotdisturb
-            //};
-            //package.Send(ec);
-            //return package.id;
-        }
-        public async Task<IList<StrangerEntity>> GetStrangerList()
-        {
-            return await DAL.DALStrangerOptionHelper.GetStrangerEntities();
-        }
-        public async Task<StrangerEntity> GetStranger(int userId)
-        {
-            return await DAL.DALStrangerOptionHelper.GetStranger(userId);
-        }
-        public async Task<bool> SetStrangerChatTopTime(int userId, DateTime? datetime)
-        {
-            return await DAL.DALStrangerOptionHelper.SetStrangerChatTopTime(userId, datetime);
-        }
-        public async Task<bool> InsertOrUpdateStrangerInfo(int userId, string photo, string name, int sex)
-        {
-            return await DAL.DALStrangerOptionHelper.InsertOrUpdateStrangerInfo(userId, photo, name, sex);
-        }
-
-        public void GetOfflineMessageList(GetOfflineMessageListPackage package = null, bool isPushUI = true)
-        {
-            if (package == null)
-            {
-                var a = Util.Helpers.Async.Run(async () => await DAL.DALAccount.GetAccount());
-
-                var msgTime = DateTime.Now.AddDays(-7);
-                if (a != null)
-                    msgTime = a.GetOffLineMsgTime ?? DateTime.Now.AddDays(-7);
-
-
-                package = new GetOfflineMessageListPackage();
-                package.ComposeHead(property.ServerJID, property.CurrentAccount.userID.ToString());
-
-                package.data = new GetOfflineMessageListPackage.Data()
-                {
-                    time = msgTime,
-                    count = 1000
-                };
-            }
-            logger.Info($"拉取离线消息的时间为：{package.data.time},package:{Util.Helpers.Json.ToJson(package)}");
-            var obj = IMRequest.GetOfflineMessageList(package);
-            if (isPushUI && obj != null && obj.code == 0)
-            {
-
-                var offlinePackage = obj;
-                if (offlinePackage != null)
-                {
-                    try
-                    {
-                        var cmd = CommmandSet.FirstOrDefault(c => c.Name == offlinePackage.api);
-                        cmd?.ExecuteCommand(ec, offlinePackage);//日志及入库操作
-
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.Error($"消息处理异常：error:{ex.Message},stack:{ex.StackTrace};\r\ncontent:{Util.Helpers.Json.ToJson(offlinePackage)}");
-
-                        System.Threading.Interlocked.CompareExchange(ref SDKClient.Instance.property.CanHandleMsg, 2, 1);
-                        logger.Info("CanHandleMsg 值修改为:2");
-                    }
-                }
-
-
-
-
-
-
-
-                //return package.id;
-            }
-        }
-        
+  
         /// <summary>
         /// 获取当前用户的登录信息
         /// </summary>
@@ -943,179 +715,10 @@ namespace SDKClient
             var a = Util.Helpers.Async.Run(async () => await DAL.DALAccount.GetAccount());
             return a;
         }
-        public async Task AppendLocalData_InviteJoinGroupPackage(InviteJoinGroupPackage package, SDKProperty.MessageState messageState = MessageState.sendfaile, bool isFoward = false)
-        {
-            await GetData(async () =>
-            {
-                messageState += (int)SDKProperty.MessageState.isRead;
-                await DAL.DALGroupOptionHelper.SendMsgtoDB(package, messageState, isFoward);
-            }).ConfigureAwait(false);
-
-        }
-        /// <summary>
-        /// 写入本地消息
-        /// </summary>
-        /// <param name="from"></param>
-        /// <param name="to"></param>
-        /// <param name="content"></param>
-        /// <param name="roomId"></param>
-        /// <param name="messageType"></param>
-        /// <param name="messageState"></param>
-        /// <param name="chatType"></param>
-        /// <returns></returns>
-        public async Task AppendLocalData_NotifyMessage(string from, string to, string content, int roomId, SDKProperty.MessageType messageType, SDKProperty.MessageState messageState = MessageState.isRead, SDKProperty.chatType chatType = chatType.chat)
-        {
-            await DAL.DALMessageHelper.SendMsgtoDB(SDKProperty.RNGId, from, to, content, roomId, 0, messageType, messageState, chatType);
-
-        }
-
-
+        
       
-        public void GetLaunchFile()
-        {
-            try
-            {
 
-                System.Net.WebClient client = new System.Net.WebClient();
-                //client.UploadProgressChanged += Client_UploadProgressChanged; ;
-                client.DownloadDataCompleted += Client_DownloadDataCompleted;
-                client.Headers.Add(System.Net.HttpRequestHeader.ContentType, "application/json");
-                client.DownloadDataAsync(new Uri(ProtocolBase.downLoadUpdateFile));
-            }
-            catch
-            {
-
-            }
-        }
-
-        private static void Client_DownloadDataCompleted(object s, System.Net.DownloadDataCompletedEventArgs e)
-        {
-            try
-            {
-                if (((WebClient)s).ResponseHeaders.GetValue("Content-Type") != "application/json")
-                {
-                    if (e.Error == null && e.Cancelled == false && e.Result.Length > 0)
-                    {
-                        var version = ((WebClient)s).ResponseHeaders.GetValue("subgradeVersion");
-                        var data = e.Result;
-                        var fileName = "IMLaunch.exe";
-                        var basePath = AppDomain.CurrentDomain.BaseDirectory;
-                        if (File.Exists(basePath + fileName))
-                        {
-                            var lst = System.Diagnostics.Process.GetProcessesByName("IMLaunch");
-                            foreach (var item in lst)
-                            {
-                                item.Kill();
-                            }
-                            File.Delete(basePath + fileName);
-                            File.WriteAllBytes(Path.Combine(basePath, fileName), data);
-                        }
-                        else
-                        {
-                            File.WriteAllBytes(Path.Combine(basePath, fileName), data);
-                        }
-                        var config = System.Configuration.ConfigurationManager.OpenExeConfiguration("IMUI.exe");
-                        //string version = "0";
-                        if (config.AppSettings.Settings["updateversion"] != null)
-                        {
-                            logger.Info($"升级包版本号：" + config.AppSettings.Settings["updateversion"].Value);
-                            config.AppSettings.Settings["updateversion"].Value = version;
-                            config.Save();
-                        }
-                        else
-                        {
-                            config.AppSettings.Settings.Add("updateversion", version);
-                            config.Save();
-                        }
-
-                        ConfigurationManager.RefreshSection("appSettings");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                logger.Error($"下载升级文件失败;message:{ex.Message}");
-            }
-        }
-        public string SendOnlineFile(int to, string fileFullName, Action<long> SetProgressSize, Action<(int isSuccess, string imgMD5, string imgId, NotificatonPackage notifyPackage)> SendComplete, Action<long> ProgressChanged,
-            System.Threading.CancellationToken? cancellationToken = null)
-        {
-
-            string MD5 = string.Empty;
-            long fileSize = 0;
-            FileInfo info = new FileInfo(fileFullName);
-            fileSize = info.Length;
-            //发送在线文件消息给对方
-            if (cancellationToken != null && !cancellationToken.Value.IsCancellationRequested)
-            {
-                string id = SendOnlineFileMessage(fileFullName, to.ToString(), MD5, fileSize, SDKProperty.P2PServer.GetLocalIP(), SDKProperty.P2PServer.GetLocalPort());
-                P2P.P2PClient p2PHelper = new P2P.P2PClient()
-                {
-                    CancellationToken = cancellationToken,
-                    FileName = fileFullName,
-                    MD5 = MD5,
-                    MsgId = id,
-                    From = property.CurrentAccount.userID,
-                    To = to,
-                    FileSize = fileSize
-                };
-                p2PHelper.SendComplete += SendComplete;
-                p2PHelper.SetProgressSize += SetProgressSize;
-                p2PHelper.ProgressChanged += ProgressChanged;
-                P2P.P2PClient.FileCache.Add(id, p2PHelper);
-                return id;
-            }
-            else
-                return null;
-
-        }
-
-
-        /// <summary>
-        /// 接收在线文件
-        /// </summary>
-        /// <param name="msgId"></param>
-        /// <param name="ip"></param>
-        /// <param name="port"></param>
-        /// <param name="to"></param>
-        /// <param name="fileName"></param>
-        /// <param name="resourceId"></param>
-        /// <param name="SetProgressSize"></param>
-        /// <param name="SendComplete"></param>
-        /// <param name="ProgressChanged"></param>
-        /// <param name="cancellationToken"></param>
-        public bool RecvOnlineFile(string msgId, string ip, int port, int to, long fileSize, string fileName, string resourceId, Action<long> SetProgressSize, Action<(int isSuccess, string imgMD5, string imgId, NotificatonPackage notifyPackage)> SendComplete, Action<long> ProgressChanged,
-         System.Threading.CancellationToken? cancellationToken = null)
-        {
-            P2P.P2PClient p2PHelper = new P2P.P2PClient()
-            {
-                CancellationToken = cancellationToken,
-                FileName = fileName,
-                RemotePort = port,
-                RemoteIP = IPAddress.Parse(ip),
-                From = to,
-                To = property.CurrentAccount.userID,
-                MD5 = resourceId,
-                MsgId = msgId,
-                FileSize = fileSize
-            };
-            p2PHelper.SendComplete += SendComplete;
-            p2PHelper.SetProgressSize += SetProgressSize;
-            p2PHelper.ProgressChanged += ProgressChanged;
-            property.SendP2PList.Add(p2PHelper);
-            if (p2PHelper.TryConnect())
-            {
-                p2PHelper.SendHeader();
-
-                return true;
-            }
-            else
-            {
-
-                return false;
-            }
-
-        }
+     
 
        
         
@@ -1123,654 +726,14 @@ namespace SDKClient
 
 
 
-        public string SendImgMessage(string path, string to, string resourceId, string smallresourceId,
-            chatType type = chatType.chat, System.Threading.CancellationToken? cancellationToken = null, string groupName = null, SDKProperty.SessionType sessionType = SessionType.CommonChat, string imgId = "")
-        {
-            MessagePackage package = new MessagePackage();
-            package.ComposeHead(to, property.CurrentAccount.userID.ToString());
-            if (!string.IsNullOrEmpty(imgId))
-                package.id = imgId;
-            string width = string.Empty, height = string.Empty;
-            try
-            {
-                using (var bmp = new System.Drawing.Bitmap(path))
-                {
-                    width = bmp.Width.ToString();
-                    height = bmp.Height.ToString();
-                }
-            }
-            catch (Exception ex)
-            {
-                SDKClient.logger.Error($"发送图片消息提取图片宽高：error:{ex.Message},stack:{ex.StackTrace};\r\n");
-            }
-            if (to == property.CurrentAccount.userID.ToString())
-            {
-
-            }
-            package.data = new message()
-            {
-                body = new ImgBody()
-                {
-                    fileName = path,
-                    id = resourceId,
-                    smallId = smallresourceId,
-                    width = width,
-                    height = height
-                },
-                senderInfo = new message.SenderInfo()
-                {
-                    photo = property.CurrentAccount.photo,
-                    userName = property.CurrentAccount.userName ?? property.CurrentAccount.loginId
-                },
-                subType = "img",
-                chatType = to == property.CurrentAccount.userID.ToString() ? (int)SessionType.FileAssistant : (int)sessionType,
-                type = type == chatType.chat ? nameof(chatType.chat) : nameof(chatType.groupChat)
-            };
-            if (type == chatType.groupChat)
-            {
-                package.data.groupInfo = new message.msgGroup()
-                {
-                    groupId = to.ToInt(),
-                    groupName = groupName
-                };
-            }
-
-            if (cancellationToken != null && cancellationToken.HasValue)
-            {
-                if (!cancellationToken.Value.IsCancellationRequested)
-                    package.Send(ec);
-            }
-            else
-                package.Send(ec);
-            return package.id;
-        }
-
-        public string SendFileMessage(string path, string to, string resourceId, long fileSize, chatType type = chatType.chat, string groupName = null, int width = 0, int height = 0, string imgMD5 = null, SDKProperty.SessionType sessionType = SessionType.CommonChat, string msgId = "")
-        {
-            MessagePackage package = new MessagePackage()
-            {
-                from = property.CurrentAccount.userID.ToString(),
-                to = to,
-                id = string.IsNullOrEmpty(msgId) ? SDKProperty.RNGId : msgId
-            };
-            package.data = new message()
-            {
-                body = new fileBody()
-                {
-                    fileSize = fileSize,
-                    fileName = path,
-                    id = resourceId,
-                    width = width,
-                    height = height,
-                    img = imgMD5
-                },
-                chatType = to == property.CurrentAccount.userID.ToString() ? (int)SessionType.FileAssistant : (int)sessionType,
-                subType = "file",
-                senderInfo = new message.SenderInfo()
-                {
-                    photo = property.CurrentAccount.photo,
-                    userName = property.CurrentAccount.userName
-                },
-                type = type == chatType.chat ? nameof(chatType.chat) : nameof(chatType.groupChat)
-            };
-
-            if (type == chatType.groupChat)
-            {
-                package.data.groupInfo = new message.msgGroup()
-                {
-                    groupId = to.ToInt(),
-                    groupName = groupName
-                };
-            }
-
-            package.Send(ec);
-            return package.id;
-        }
-        public string SendFiletoDB(string path, string to, string resourceId, long fileSize, chatType type = chatType.chat, string groupName = null, int width = 0, int height = 0, string imgMD5 = null, SDKProperty.SessionType sessionType = SessionType.CommonChat, string msgId = "")
-        {
-            MessagePackage package = new MessagePackage()
-            {
-                from = property.CurrentAccount.userID.ToString(),
-                to = to,
-                id = string.IsNullOrEmpty(msgId) ? SDKProperty.RNGId : msgId
-            };
-            package.data = new message()
-            {
-                body = new fileBody()
-                {
-                    fileSize = fileSize,
-                    fileName = Path.GetFileName(path),
-                    id = resourceId,
-                    width = width,
-                    height = height,
-                    img = imgMD5
-                },
-              
-                chatType = to == property.CurrentAccount.userID.ToString() ? (int)SessionType.FileAssistant : (int)sessionType,
-                subType = "file",
-                senderInfo = new message.SenderInfo()
-                {
-                    photo = property.CurrentAccount.photo,
-                    userName = property.CurrentAccount.userName
-                },
-                type = type == chatType.chat ? nameof(chatType.chat) : nameof(chatType.groupChat)
-            };
-
-            if (type == chatType.groupChat)
-            {
-                package.data.groupInfo = new message.msgGroup()
-                {
-                    groupId = to.ToInt(),
-                    groupName = groupName
-                };
-            }
-            Util.Helpers.Async.Run(async () => await DAL.DALMessageHelper.SendFiletoDB(package));
-
-            return package.id;
-        }
-        public string SendSmallVideoMessage(string path, string to, string recordTime, string resourceId, string previewId, int width, int height, long fileSize, chatType type = chatType.chat, string groupName = null, SDKProperty.SessionType sessionType = SessionType.CommonChat, string msgId = "")
-        {
-            MessagePackage package = new MessagePackage()
-            {
-                from = property.CurrentAccount.userID.ToString(),
-                to = to,
-                id = string.IsNullOrEmpty(msgId) ? SDKProperty.RNGId : msgId,
-            };
-            package.data = new message()
-            {
-                body = new smallVideoBody()
-                {
-                    fileSize = fileSize,
-                    fileName = path,
-                    id = resourceId,
-                    previewId = previewId,
-                    width = width,
-                    height = height,
-
-                    recordTime = recordTime
-
-                },
-                subType = Util.Helpers.Enum.GetDescription<SDKProperty.MessageType>(SDKProperty.MessageType.smallvideo),
-                chatType = to == property.CurrentAccount.userID.ToString() ? (int)SessionType.FileAssistant : (int)sessionType,
-                senderInfo = new message.SenderInfo()
-                {
-                    photo = property.CurrentAccount.photo,
-                    userName = property.CurrentAccount.userName
-                },
-                type = type == chatType.chat ? nameof(chatType.chat) : nameof(chatType.groupChat)
-            };
-
-            if (type == chatType.groupChat)
-            {
-                package.data.groupInfo = new message.msgGroup()
-                {
-                    groupId = to.ToInt(),
-                    groupName = groupName
-                };
-            }
-
-            package.Send(ec);
-            return package.id;
-        }
-        /// <summary>
-        /// 设置群组的管理
-        /// </summary>
-        /// <param name="type">CancelManager:取消管理员 SetManager：设置管理员</param>
-        /// <param name="userID">被设置者ID</param>
-        /// <param name="groupID">群组ID</param>
-        /// <returns></returns>
-        public string SetGroupMemberAdmin(SetCancelGroupPowerOption type, int userID, int groupID)
-        {
-            SetMemberPowerPackage groupPackage = new SetMemberPowerPackage();
-            groupPackage.ComposeHead(null, property.CurrentAccount.userID.ToString());
-            groupPackage.data = new SetMemberPowerPackage.Data()
-            {
-                type = type == SetCancelGroupPowerOption.SetManager ? "admin" : "unAdmin",
-                userIds = new List<int>(),
-                groupId = groupID,
-                adminId = property.CurrentAccount.userID
-            };
-            groupPackage.data.userIds.Add(userID);
-            groupPackage.Send(ec);
-            return groupPackage.id;
-        }
-        private string SendOnlineFileMessage(string path, string to, string resourceId, long fileSize, string ip, int port, SDKProperty.SessionType sessionType = SessionType.CommonChat)
-        {
-            string id;
-            MessagePackage package = new MessagePackage()
-            {
-                from = property.CurrentAccount.userID.ToString(),
-                to = to,
-                id = SDKProperty.RNGId
-            };
-            id = package.id;
-            Task.Run(() =>
-            {
-                package.data = new message()
-                {
-                    body = new OnlineFileBody()
-                    {
-                        fileSize = fileSize,
-                        fileName = path,
-                        id = resourceId,
-                        IP = ip,
-                        Port = port
-                    },
-                    subType = nameof(SDKProperty.MessageType.onlinefile),
-                    chatType = (int)sessionType,
-                    senderInfo = new message.SenderInfo()
-                    {
-                        photo = property.CurrentAccount.photo,
-                        userName = property.CurrentAccount.userName
-                    },
-                    type = nameof(chatType.chat)
-                };
-                package.Send(ec);
-            });
-            return id;
-        }
-
-        /// <summary>
-        /// 发送文件消息
-        /// </summary>
-        /// <param name="fileFullName">文件全路径</param>
-        /// <param name="SetProgressSize">设置进度条大小</param>
-        /// <param name="SendComplete">发送成功CB</param>
-        /// <param name="ProgressChanged">进度条变化CB</param>
-        /// <param name="to">目标ID</param>
-        /// <param name="type">聊天类型<see cref="SDKProperty.chatType"/></param>
-        /// <param name="cancellationToken">取消结构体对象</param>
-        /// <param name="messageType">消息类型<see cref="SDKProperty.MessageType"/></param>
-        /// <param name="groupName">如果type=[<see cref="SDKProperty.chatType.groupChat"/>]，需要提供群名称</param>
-        /// <param name="imgFullName">缩略图全路径</param>
-        /// <returns></returns>
+       
+      
+        
        
        
-        public async void UpdateMsgFileName(string msgId, string fileName)
-        {
-            await DAL.DALMessageHelper.UpdateMsgNewFileName(msgId, fileName);
-        }
-       
-        public string GetUser(int userId)
-        {
-
-            GetUserPackage package = new GetUserPackage();
-            package.ComposeHead(property.ServerJID, property.CurrentAccount.userID.ToString());
-            package.data = new GetUserPackage.Data()
-            {
-                userId = userId,
-                user = new user()
-                {
-                    userId = userId
-                }
-            };
-            //ThreadPool.QueueUserWorkItem(m =>
-            //{
-            var _loadHisTask = Task.Run(() =>
-            {
-                var userPackage = IMRequest.GetUser(package);
-                if (userPackage != null && userPackage.code == 0)
-                {
-                    try
-                    {
-                        var cmd = CommmandSet.FirstOrDefault(c => c.Name == userPackage.api);
-                        cmd?.ExecuteCommand(ec, userPackage);//日志及入库操作
-
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.Error($"获取用户信息数据处理异常：error:{ex.Message},stack:{ex.StackTrace};\r\ncontent:{Util.Helpers.Json.ToJson(userPackage)}");
-
-                        System.Threading.Interlocked.CompareExchange(ref SDKClient.Instance.property.CanHandleMsg, 2, 1);
-                        logger.Info("CanHandleMsg 值修改为:2");
-                    }
-                }
-            }).ContinueWith((t) =>
-            {
-
-            });
-            //});
-            //package.Send(ec).id
-            return package.id;
-        }
-        /// <summary>
-        /// 获取好友
-        /// </summary>
-        /// <param name="userId"></param>
-        /// <param name="friendId"></param>
-        /// <returns></returns>
-        public GetFriendPackage GetFriend(int friendId)
-        {
-            GetFriendPackage package = new GetFriendPackage();
-            package.ComposeHead(property.ServerJID, property.CurrentAccount.userID.ToString());
-            package.data = new GetFriendPackage.Data()
-            {
-                userId = property.CurrentAccount.userID,
-                friendId = friendId,
-                //item = new user()
-                //{
-                //    userId = userId
-                //}
-            };
-            var userPackage = IMRequest.GetFreind(package);
-            return userPackage;
-        }
-        public async Task<bool> GetUserPcOnlineInfo(int userId)
-        {
-            return await GetData<bool>(async () =>
-            {
-                return await WebAPICallBack.CheckUserIsOnline(userId);
-            });
-        }
      
       
-        public string UpdateFriendSet(UpdateFriendSetPackage.FriendSetOption option, string content, int friendId)
-        {
-
-            UpdateFriendSetPackage package = new UpdateFriendSetPackage();
-            package.ComposeHead(property.ServerJID, property.CurrentAccount.userID.ToString());
-            package.data = new UpdateFriendSetPackage.Data()
-            {
-                userId = property.CurrentAccount.userID,
-                friendId = friendId,
-                setType = (int)option,
-                content = content
-            };
-
-            return package.Send(ec).id;
-        }
-        /// <summary>
-        /// 修改用户可访号
-        /// </summary>
-        /// <param name="kfId"></param>
-        /// <returns></returns>
-        public string UpdateUserKfId(string kfId)
-        {
-            UpdateuserPackage package = new UpdateuserPackage();
-            package.ComposeHead(property.ServerJID, property.CurrentAccount.userID.ToString());
-            package.data = new UpdateuserPackage.Data
-            {
-                content = kfId,
-                updateType = 28,
-                userId = property.CurrentAccount.userID
-
-            };
-            package.Send(ec);
-            return package.id;
-        }
-
-
-        public string GetContactsList()
-        {
-            var card = SDKClient.Instance.property.CurrentAccount.imei ?? System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces().FirstOrDefault(N => N.NetworkInterfaceType != System.Net.NetworkInformation.NetworkInterfaceType.Loopback)?.GetPhysicalAddress().ToString();
-            if (SDKClient.Instance.property.CurrentAccount.preimei == card)
-            {
-                var dbobj = Util.Helpers.Async.Run(async () => await DAL.DALContactListHelper.GetCurrentContactListPackage());
-                if (dbobj != null && dbobj.getContactsListPackage != null)
-                {
-                    var localContactPackage = Util.Helpers.Json.ToObject<GetContactsListPackage>(dbobj.getContactsListPackage);
-                    SDKClient.Instance.OnNewDataRecv(localContactPackage);
-                }
-            }
-            GetContactsListPackage package = new GetContactsListPackage();
-            package.ComposeHead(property.ServerJID, property.CurrentAccount.userID.ToString());
-            package.data = new GetContactsListPackage.contacts();
-            package.data.userId = property.CurrentAccount.userID;
-            //var _loadHisTask = Task.Run(() =>
-            //{
-            var obj = IMRequest.GetContactsList(package);
-            if (obj != null)
-            {
-                var contactsPackage = obj;
-                if (contactsPackage != null && contactsPackage.code == 0)
-                {
-                    try
-                    {
-                        var cmd = CommmandSet.FirstOrDefault(c => c.Name == contactsPackage.api);
-                        cmd?.ExecuteCommand(ec, contactsPackage);//日志及入库操作
-
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.Error($"获取好友列表数据处理异常：error:{ex.Message},stack:{ex.StackTrace};\r\ncontent:{Util.Helpers.Json.ToJson(contactsPackage)}");
-
-                        System.Threading.Interlocked.CompareExchange(ref SDKClient.Instance.property.CanHandleMsg, 2, 1);
-                        logger.Info("CanHandleMsg 值修改为:2");
-                    }
-                }
-            }
-            else
-            {
-
-            }
-            //}).ContinueWith((t)=>{
-            //    return package.id;
-            //});
-            //package.Send(ec);
-
-            return package.id;
-        }
-        public int GetFriendApplyStatus(int friendApplyId)
-        {
-            var obj = IMRequest.GetFriendApplyStatus(friendApplyId);
-            return obj;
-        }
-        public string GetBlackList()
-        {
-            GetBlackListPackage package = new GetBlackListPackage();
-            package.ComposeHead(null, property.CurrentAccount.userID.ToString());
-            package.data = new GetBlackListPackage.Data()
-            {
-                min = 1,
-                max = 100,
-                userId = property.CurrentAccount.userID
-
-            };
-            var obj = IMRequest.GetBlackList(package);
-            if (obj != null && obj.code == 0)
-            {
-                var blackPackage = obj;
-                if (blackPackage != null)
-                {
-                    try
-                    {
-                        var cmd = CommmandSet.FirstOrDefault(c => c.Name == blackPackage.api);
-                        cmd?.ExecuteCommand(ec, blackPackage);//日志及入库操作
-
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.Error($"获取黑名单列表数据处理异常：error:{ex.Message},stack:{ex.StackTrace};\r\ncontent:{Util.Helpers.Json.ToJson(blackPackage)}");
-
-                        System.Threading.Interlocked.CompareExchange(ref SDKClient.Instance.property.CanHandleMsg, 2, 1);
-                        logger.Info("CanHandleMsg 值修改为:2");
-                    }
-                }
-            }
-            else
-            {
-
-            }
-            //package.Send(ec).id
-            return package.id;
-
-        }
-        /// <summary>
-        /// 获取入群申请列表
-        /// </summary>
-        /// <param name="groupId"></param>
-        public void GetJoinGroupList(int groupId)
-        {
-            var lst = Util.Helpers.Async.Run(async () => await DAL.DALJoinGroupHelper.GetJoinGroupList(groupId).ConfigureAwait(false));
-            foreach (var item in lst)
-            {
-                var obj = Util.Helpers.Json.ToObject<JoinGroupPackage>(item.JoinGroupPackage);
-                SDKClient.Instance.OnNewDataRecv(obj);
-            }
-        }
-        public string GetGroupList()
-        {
-            var card = SDKClient.Instance.property.CurrentAccount.imei ?? System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces().FirstOrDefault(N => N.NetworkInterfaceType != System.Net.NetworkInformation.NetworkInterfaceType.Loopback)?.GetPhysicalAddress().ToString();
-
-            if (SDKClient.Instance.property.CurrentAccount.preimei == card)
-            {
-                var dbobj = Util.Helpers.Async.Run(async () => await DAL.DALGroupOptionHelper.GetGroupListPackage());
-                if (dbobj != null && dbobj.getGroupListPackage != null)
-                {
-                    var groupListPackage = Util.Helpers.Json.ToObject<GetGroupListPackage>(dbobj.getGroupListPackage);
-                    SDKClient.Instance.OnNewDataRecv(groupListPackage);
-                }
-
-            }
-            GetGroupListPackage package = new GetGroupListPackage();
-            package.ComposeHead(property.ServerJID, property.CurrentAccount.userID.ToString());
-            package.data = new grouplist()
-            {
-                max = 100,
-                min = 1,
-                groupType = 0, //普通群
-                userId = property.CurrentAccount.userID
-
-            };
-            var obj = IMRequest.GetGroupListPackage(package);
-            if (obj != null && obj.code == 0)
-            {
-                var groupListPackage = obj;
-                if (groupListPackage != null)
-                {
-                    try
-                    {
-                        var cmd = CommmandSet.FirstOrDefault(c => c.Name == groupListPackage.api);
-                        cmd?.ExecuteCommand(ec, groupListPackage);//日志及入库操作
-
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.Error($"获取群列表数据处理异常：error:{ex.Message},stack:{ex.StackTrace};\r\ncontent:{Util.Helpers.Json.ToJson(groupListPackage)}");
-
-                        System.Threading.Interlocked.CompareExchange(ref SDKClient.Instance.property.CanHandleMsg, 2, 1);
-                        logger.Info("CanHandleMsg 值修改为:2");
-                    }
-                }
-            }
-            else
-            {
-
-            }
-            //package.Send(ec);
-            return package.id;
-        }
-        /// <summary>
-        /// 获取单个群成员信息
-        /// </summary>
-        /// <param name="userId">查看着ID</param>
-        /// <param name="groupId">群ID</param>
-        /// <param name="partnerId">被查看着ID</param>
-        /// <returns></returns>
-        public string GetGroupMember(int userId, int groupId, int partnerId)
-        {
-
-            GetGroupMemberPackage package = new GetGroupMemberPackage();
-            package.ComposeHead(property.ServerJID, property.CurrentAccount.userID.ToString());
-
-            package.data = new GetGroupMemberPackage.Data
-            {
-                groupId = groupId,
-                userId = userId,
-                partnerId = partnerId
-            };
-            package.Send(ec);
-            return package.id;
-        }
-        public string GetGroupMemberList(int groupId, bool isLoaclData = false)
-        {
-
-            //var dbobj = Util.Helpers.Async.Run(async () => await DAL.DALGroupOptionHelper.GetGroupListPackage());
-
-            var card = SDKClient.Instance.property.CurrentAccount.imei ?? System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces().FirstOrDefault(N => N.NetworkInterfaceType != System.Net.NetworkInformation.NetworkInterfaceType.Loopback)?.GetPhysicalAddress().ToString();
-
-
-            if (isLoaclData && SDKClient.Instance.property.CurrentAccount.preimei == card)
-            {
-                var dbobj = Util.Helpers.Async.Run(async () => await DAL.DALGroupOptionHelper.GetGroupMemberListPackage(groupId));
-                if (dbobj != null && dbobj.getGroupMemberListPackage != null)
-                {
-                    var groupListPackage = Util.Helpers.Json.ToObject<GetGroupMemberListPackage>(dbobj.getGroupMemberListPackage);
-                    SDKClient.Instance.OnNewDataRecv(groupListPackage);
-                }
-            }
-            GetGroupMemberListPackage package = new GetGroupMemberListPackage();
-            package.ComposeHead(property.ServerJID, property.CurrentAccount.userID.ToString());
-            package.data = new groupmemberlist()
-            {
-                max = 100,
-                min = 1,
-                groupId = groupId //普通群
-            };
-            var obj = IMRequest.GetMemberList(package);
-            if (obj != null)
-            {
-                var groupMemberListPackage = obj;
-                if (groupMemberListPackage != null)
-                {
-                    try
-                    {
-                        var cmd = CommmandSet.FirstOrDefault(c => c.Name == groupMemberListPackage.api);
-                        cmd?.ExecuteCommand(ec, groupMemberListPackage);//日志及入库操作
-
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.Error($"获取群成员数据处理异常：error:{ex.Message},stack:{ex.StackTrace};\r\ncontent:{Util.Helpers.Json.ToJson(groupMemberListPackage)}");
-
-                        System.Threading.Interlocked.CompareExchange(ref SDKClient.Instance.property.CanHandleMsg, 2, 1);
-                        logger.Info("CanHandleMsg 值修改为:2");
-                    }
-                }
-            }
-            else
-            {
-
-            }
-            //package.Send(ec).id
-            return package.id;
-
-        }
-        public async void GetImDataListIncr()
-        {
-            var items = await IMRequest.GetImDataListIncr();
-            if (items == null || items.data == null)
-                return;
-            
-            if (items.data.contactsItem != null && items.data.contactsItem.Any())
-            {
-                GetContactsListPackage cp = new GetContactsListPackage();
-                cp.data = new GetContactsListPackage.contacts();
-                cp.data.items = items.data.contactsItem;
-                cp.data.userId = items.data.userId;
-                OnNewDataRecv(cp);
-            }
-            if (items.data.myBlackItem != null && items.data.myBlackItem.Any())
-            {
-                GetBlackListPackage bp = new GetBlackListPackage();
-                bp.data = new GetBlackListPackage.Data();
-                bp.data.items = items.data.myBlackItem;
-                bp.data.userId = items.data.userId;
-                OnNewDataRecv(bp);
-            }
-            
-            if (items.data.strangersItem != null && items.data.strangersItem.Any())
-            {
-                GetAttentionListPackage ap = new GetAttentionListPackage();
-                ap.data = new GetAttentionListPackage.Data();
-                ap.data.items = items.data.strangersItem;
-                ap.data.userId = items.data.userId;
-                OnNewDataRecv(ap);
-            }
-          
-
-
-        }
+       
 
         /// <summary>
         /// 获取二维码图片
@@ -1782,7 +745,7 @@ namespace SDKClient
         {
             if (string.IsNullOrEmpty(SDKClient.Instance.property.CurrentAccount.token))
             {
-                var res = WebAPICallBack.Getfuck();
+                var res = WebAPICallBack.GetQrCodeImg();
                 SDKClient.Instance.property.CurrentAccount.token = res.token;
 
                 logger.Error($"获取token：token:{res.token}");
@@ -2704,390 +1667,7 @@ namespace SDKClient
        
 
 #endregion
-#region 客服接口
 
-        public async Task<string> SendCustiomServerMsg(string to, string sessionId, SDKProperty.customOption customOption = customOption.over)
-        {
-            if (string.IsNullOrEmpty(sessionId))
-                return null;
-            return await GetData<string>(() =>
-            {
-                switch (customOption)
-                {
-                    case customOption.conn:
-                        return null;
-                    case customOption.over:
-                        CustomServicePackage customServicePackage = new CustomServicePackage();
-                        customServicePackage.ComposeHead(to, property.CurrentAccount.userID.ToString());
-                        customServicePackage.data = new CustomServicePackage.Data()
-                        {
-                            type = (int)customOption,
-                            sessionId = sessionId
-                        };
-                        customServicePackage.Send(ec);
-
-                        logger.Info($"会话结束\t：sessionId：{sessionId}");
-                        WebAPICallBack.DiminishingSessionItem(sessionId);
-
-                        return customServicePackage.id;
-                    case customOption.requestappraisal:
-                        MessagePackage messagePackage = new MessagePackage();
-                        messagePackage.ComposeHead(to, property.CurrentAccount.userID.ToString());
-                        messagePackage.data = new message()
-                        {
-                            body = new EvalBody()
-                            {
-                                id = sessionId
-                            },
-                            subType = nameof(SDKProperty.MessageType.eval),
-                            senderInfo = new message.SenderInfo()
-                            {
-                                photo = property.CurrentAccount.photo,
-                                userName = property.CurrentAccount.userName
-                            },
-                            type = nameof(SDKProperty.chatType.chat)
-
-
-                        };
-                        messagePackage.Send(ec);
-                        return messagePackage.id;
-
-                    case customOption.responseappraisal:
-                        break;
-
-                    default:
-                        break;
-                }
-                return null;
-
-            }).ConfigureAwait(false);
-        }
-        /// <summary>
-        /// 客服转接
-        /// </summary>
-        /// <param name="to">用户ID</param>
-        /// <param name="exchangeId">新客服服务ID</param>
-        /// <returns></returns>
-        public async Task<bool> SendCustiomExchangeMsg(string to, int exchangeId)
-        {
-
-            if (exchangeId == 0)
-                exchangeId = SDKClient.Instance.property.CurrentAccount.CustomProperty.ServicerId ?? 0;
-
-            if (exchangeId == 0 || exchangeId == SDKClient.Instance.property.CurrentAccount.CustomProperty.ServicerId)
-            {
-                exchangeId = SDKClient.Instance.property.CurrentAccount.CustomProperty.ServicerId ?? 0;
-                var resut = await WebAPICallBack.CustomExchange(to.ToInt(), exchangeId).ConfigureAwait(false);
-                if (resut.code == 1)
-                {
-                    CustomExchangePackage customExchangePackage = new CustomExchangePackage();
-                    customExchangePackage.ComposeHead(to, property.CurrentAccount.userID.ToString());
-                    customExchangePackage.data = new CustomExchangePackage.Data()
-                    {
-                        photo = null,
-                        sessionId = resut.data.sessionid,
-                        userId = resut.data.imopenid.ToInt()
-                    };
-                    customExchangePackage.Send(ec);
-
-
-                    logger.Info($"申请会话\t：新的客服:{exchangeId},userId:{resut.data.imopenid},新的sessionId：{resut.data.sessionid}");
-                    return true;
-                }
-                else
-                {
-                    logger.Info($"申请会话失败\t：to:{to},exchangeId:{exchangeId},code:{resut.code}");
-                    return false;
-                }
-            }
-            else
-            {
-                var resut = await WebAPICallBack.CustomExchange(to.ToInt(), exchangeId, 1).ConfigureAwait(false);
-                if (resut.code == 1)
-                {
-                    CustomExchangePackage customExchangePackage = new CustomExchangePackage();
-                    customExchangePackage.ComposeHead(to, property.CurrentAccount.userID.ToString());
-                    customExchangePackage.data = new CustomExchangePackage.Data()
-                    {
-                        photo = null,
-                        sessionId = resut.data.sessionid,
-                        userId = resut.data.imopenid.ToInt()
-                    };
-                    customExchangePackage.Send(ec);
-
-                    logger.Info($"会话转移\t：新的客服:{exchangeId},userId:{resut.data.imopenid},新的sessionId：{resut.data.sessionid}");
-                    return true;
-                }
-                else
-                {
-                    logger.Info($"会话转移失败\t：to:{resut.data.imopenid},exchangeId:{exchangeId},code:{resut.code}");
-                    return false;
-                }
-            }
-        }
-        public bool SetCustiomServerState(SDKProperty.customState customState)
-        {
-
-            logger.Info($"设置客服状态\t：状态为：{Util.Helpers.Enum.GetDescription<SDKProperty.customState>(customState)}");
-            var response = WebAPICallBack.PostCustomServerState(customState);
-            if (response.code == 1)
-            {
-                return true;
-            }
-            else
-            {
-                return false;
-            }
-
-        }
-        public async Task<List<DTO.CSRoomListEntity.entity>> GetCSRoomlist()
-        {
-
-            var response = await WebAPICallBack.GetCSRoomlist().ConfigureAwait(false);
-            SDKClient.logger.Info($"GetCSRoomlist: {Util.Helpers.Json.ToJson(response)}");
-            if (response != null && response.data != null && response.data.Count > 0)
-            {
-                return response.data.Select(e => new DTO.CSRoomListEntity.entity()
-                {
-                    userId = e.imopenid,
-                    photo = e.photo,
-                    mobile = e.mobile,
-                    shopBackUrl = e.shopBackUrl,
-                    shopId = e.shopId,
-                    shopName = e.shopName,
-                    sessionType = e.sessionType,
-                    sessionId = e.sesssionId
-                }).ToList();
-            }
-            else
-                return new List<DTO.CSRoomListEntity.entity>();
-
-        }
-        public async Task<List<DTO.CSTempCustomItem>> GetTempCSRoomlist()
-        {
-
-            var response = await IMRequest.GetTempCSRoomlist().ConfigureAwait(false);
-            logger.Info(Util.Helpers.Json.ToJson(response));
-            if (response != null && response.entryList != null && response.entryList.Count > 0)
-            {
-                return response.entryList.Select(e =>
-                {
-                    string msg = "";
-                    if (!string.IsNullOrEmpty(e.lastMessage))
-                    {
-                        MessagePackage mp = Util.Helpers.Json.ToObject<MessagePackage>(e.lastMessage);
-                        if (mp != null)
-                        {
-                            switch (mp.data.subType.ToLower())
-                            {
-                                case nameof(SDKProperty.MessageType.txt):
-                                    string txt = mp.data.body.text;
-
-                                    msg = txt;
-                                    break;
-                                case nameof(SDKProperty.MessageType.img):
-
-                                    msg = "[图片]";
-                                    break;
-                                case nameof(SDKProperty.MessageType.retract):
-
-                                    msg = "消息撤回";
-                                    break;
-                                case nameof(SDKProperty.MessageType.eval):
-
-                                    msg = "[对方已评价]";
-
-                                    break;
-                                case nameof(SDKProperty.MessageType.goods):
-
-                                    msg = "[商品链接]";
-
-                                    break;
-                                case nameof(SDKProperty.MessageType.order):
-
-                                    msg = "[订单链接]";
-
-                                    break;
-                                case nameof(SDKProperty.MessageType.custom):
-
-                                    msg = "[商品链接]";
-
-                                    break;
-                                default:
-                                    msg = "";
-                                    break;
-                            }
-                            return new DTO.CSTempCustomItem()
-                            {
-                                userId = e.userId,
-                                photo = e.photo,
-                                userName = e.userName,
-                                message = msg,
-                                UnreadCount = e.count,
-                                msgTime = mp.time ?? DateTime.Now
-
-                            };
-                        }
-                        else
-                        {
-                            return new DTO.CSTempCustomItem()
-                            {
-                                userId = e.userId,
-                                photo = e.photo,
-                                userName = e.userName,
-                                message = msg,
-                                UnreadCount = e.count,
-                                msgTime = DateTime.Now
-
-                            };
-                        }
-
-                    }
-                    else
-                    {
-                        return new DTO.CSTempCustomItem()
-                        {
-                            userId = e.userId,
-                            photo = e.photo,
-                            userName = e.userName,
-                            message = msg,
-                            UnreadCount = e.count,
-                            msgTime = DateTime.Now
-
-                        };
-                    }
-
-
-
-                }).ToList();
-            }
-            else
-                return new List<DTO.CSTempCustomItem>();
-
-        }
-        /// <summary>
-        /// 获取快速回复类别集合
-        /// </summary>
-        /// <param name="cateType">类型类别 1 公共 2 个人</param>
-        /// <returns></returns>
-        public QuickReplycategory GetQuickReplycategory(int cateType)
-        {
-            return WebAPICallBack.GetQuickReplycategory(cateType);
-
-        }
-        /// <summary>
-        /// 获取快速回复上下文
-        /// </summary>
-        /// <param name="cateType">快捷回复类型类别 1 公共快捷 2 个人快捷</param>
-        /// <param name="actionType"></param>
-        /// <returns></returns>
-        public async Task<QuickReplycontent> GetQuickReplycontext(int cateType)
-        {
-            return await WebAPICallBack.GetQuickReplycontext(cateType);
-        }
-        /// <summary>
-        /// 获取客服系统配置
-        /// </summary>
-
-        /// <returns></returns>
-        public async Task<CSSysConfig> GetSysConfig()
-        {
-            return await WebAPICallBack.GetOnLineServicerSysConfig();
-        }
-        public async Task<OnlineStatusEntity> GetfreeServicers()
-        {
-            return await WebAPICallBack.GetfreeServicers().ConfigureAwait(false);
-        }
-        /// <summary>
-        /// 根据日期 获取会话信息
-        /// </summary>
-        /// <param name="userId"></param>
-        /// <param name="date"></param>
-        /// <returns></returns>
-        public async Task<CSSysConfig> GetSessionByDate(int userId, DateTime date)
-        {
-            return await WebAPICallBack.GetSessionDate(date, userId);
-        }
-        /// <summary>
-        /// 获取指定类型的记录项集合
-        /// </summary>
-        /// <param name="cateId">类型ID</param>
-        /// <returns></returns>
-        public QuickReplyCategorycontents GetQuickReplyCategorycontents(int cateId)
-        {
-            return WebAPICallBack.GetQuickReplyCategorycontents(cateId);
-        }
-        /// <summary>
-        /// CURD类型信息
-        /// </summary>
-        /// <param name="editType">1新增，2修改，3删除</param>
-        /// <param name="categoryId">类型ID</param>
-        /// <param name="categoryName">类型名称</param>
-        /// <param name="categoryType">1:公共，2:个人</param>
-        /// <returns>success:是否成功，id:内容项ID</returns>
-        public (bool success, int id) PostQuickReplyCategoryedit(int editType, int categoryId, string categoryName, int categoryType)
-        {
-            return WebAPICallBack.PostQuickReplyCategoryedit(editType, categoryId, categoryName, categoryType);
-        }
-        /// <summary>
-        /// CURD具体记录项的信息
-        /// </summary>
-        /// <param name="editType">1新增，2修改，3删除</param>
-        /// <param name="contentId">记录项ID</param>
-        /// <param name="content">内容</param>
-        /// <param name="categoryId">类型ID</param>
-        /// <returns> success:是否成功，id:内容项ID</returns>
-        public (bool success, int id) PostQuickReplyContentedit(int editType, int contentId, string content, int categoryId)
-        {
-            return WebAPICallBack.PostQuickReplyContentedit(editType, contentId, content, categoryId);
-        }
-        /// <summary>
-        /// 通过手机号查找指定满金店用户
-        /// </summary>
-        /// <param name="mobile"></param>
-        /// <returns></returns>
-        public (bool success, CSRoomListEntity.entity entity) GetUserInfoByMobile(string mobile)
-        {
-            return WebAPICallBack.GetUserInfoByMobile(mobile);
-        }
-        /// <summary>
-        /// 通过手机号查找指定满金店用户
-        /// </summary>
-        /// <param name="mobile"></param>
-        /// <returns></returns>
-        public (bool success, CSRoomListEntity.entity entity) QueryuserByMobile(string mobile)
-        {
-            return WebAPICallBack.QueryuserByMobile(mobile);
-        }
-        public static async Task<HistoryRecordListResp> Getuserhistorylist(int PageIndex = 0)
-        {
-            return await WebAPICallBack.Getuserhistorylist(PageIndex);
-        }
-        public async Task<string> GetAddressByIP(string ip)
-        {
-            var obj = await WebAPICallBack.GetAddressByIP(ip).ConfigureAwait(false);
-            logger.Info($"根据IP获取地址信息\t：ip为：{ip},address:{obj.data}");
-            if (string.IsNullOrEmpty(obj.data))
-                return null;
-            else
-                return obj.data.TrimEnd(',');
-        }
-        /// <summary>
-        /// 领取任务
-        /// </summary>
-        /// <param name="userId">用户的ID</param>
-        /// <returns></returns>
-        public string SendCSSyncMsgStatus(int userId, string photo, string nickName)
-        {
-            CSSyncMsgStatusPackage package = new CSSyncMsgStatusPackage();
-            package.ComposeHead(null, property.CurrentAccount.userID.ToString());
-            package.data = new CSSyncMsgStatusPackage.Data();
-            package.data.userId = userId;
-            package.data.photo = photo;
-            package.data.userName = nickName;
-            return package.Send(ec).id;
-        }
-#endregion
 
     }
 }
