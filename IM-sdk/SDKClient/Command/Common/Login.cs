@@ -36,37 +36,7 @@ namespace SDKClient.Command
                 //客服登陆请求
                 if (SDKClient.Instance.property.CurUserType == SDKProperty.userType.customserver)
                 {
-                    var response = WebAPICallBack.GetGrant();
-                    if (response.code == 0)//成功
-                    {
-                        var ca  = SDKClient.Instance.property.CurrentAccount;
-                        ca.token = response.token;
-                        ca.CustomProperty.Role = response.role ?? 0;
-                        ca.CustomProperty.ServicerId = response.servicerId ?? 0;
-                        ca.CustomProperty.Nickname = response.nickname;
-                        ca.CustomProperty.Station = response.station;
-                        AuthPackage package = new AuthPackage();
-                        package.ComposeHead(loginPackage.from, null);
-                        package.data = new Model.auth()
-                        {
-                            deviceId = loginPackage.data.deviceId,
-                            session = loginPackage.data.session,
-                            imVersion = SDKClient.Instance.property.CurrentAccount.imVersion,
-                            userType = (int)SDKClient.Instance.property.CurUserType,
-                            deviceOs = GetOSName(),
-                            token = response.token
-                        };
-                        package.Send(session);
-
-                        logger.Info($"session:{loginPackage.data.session}");
-                    }
-                    else
-                    {
-                        packageInfo.code = response.code;
-                      
-                        packageInfo.error = Util.Helpers.Enum.GetDescription<StatusCode>(packageInfo.code);
-                        
-                    }
+                    
                 }
                 else//IM登陆请求
                 {

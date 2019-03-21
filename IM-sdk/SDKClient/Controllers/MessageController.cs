@@ -428,44 +428,9 @@ namespace SDKClient.Controllers
         {
             Util.Helpers.Async.Run(async () => await DAL.DALMessageHelper.UpdateMsgContent(msgId, content, SDKProperty.MessageType.notification));
         }
-        private static string SendOnlineFileMessage(string path, string to, string resourceId, long fileSize, string ip, int port, SDKProperty.SessionType sessionType = SessionType.CommonChat)
-        {
-            string id;
-            MessagePackage package = new MessagePackage()
-            {
-                from = SDKClient.Instance.property.CurrentAccount.userID.ToString(),
-                to = to,
-                id = SDKProperty.RNGId
-            };
-            id = package.id;
-            Task.Run(() =>
-            {
-                package.data = new message()
-                {
-                    body = new OnlineFileBody()
-                    {
-                        fileSize = fileSize,
-                        fileName = path,
-                        id = resourceId,
-                        IP = ip,
-                        Port = port
-                    },
-                    subType = nameof(SDKProperty.MessageType.onlinefile),
-                    chatType = (int)sessionType,
-                    senderInfo = new message.SenderInfo()
-                    {
-                        photo = SDKClient.Instance.property.CurrentAccount.photo,
-                        userName = SDKClient.Instance.property.CurrentAccount.userName
-                    },
-                    type = nameof(chatType.chat)
-                };
-                package.Send(SDKClient.Instance.ec);
-            });
-            return id;
-        }
 
         public static string SendOnlineFile(int to, string fileFullName, Action<long> SetProgressSize, Action<(int isSuccess, string imgMD5, string imgId, NotificatonPackage notifyPackage)> SendComplete, Action<long> ProgressChanged,
-            System.Threading.CancellationToken? cancellationToken = null)
+          System.Threading.CancellationToken? cancellationToken = null)
         {
 
             string MD5 = string.Empty;
@@ -509,7 +474,11 @@ namespace SDKClient.Controllers
         /// <param name="SendComplete"></param>
         /// <param name="ProgressChanged"></param>
         /// <param name="cancellationToken"></param>
-        public static bool RecvOnlineFile(string msgId, string ip, int port, int to, long fileSize, string fileName, string resourceId, Action<long> SetProgressSize, Action<(int isSuccess, string imgMD5, string imgId, NotificatonPackage notifyPackage)> SendComplete, Action<long> ProgressChanged,
+        public static bool RecvOnlineFile(string msgId, string ip, int port, int to, 
+            long fileSize, string fileName, string resourceId, 
+            Action<long> SetProgressSize, 
+            Action<(int isSuccess, string imgMD5, string imgId, NotificatonPackage notifyPackage)> SendComplete, 
+            Action<long> ProgressChanged,
          System.Threading.CancellationToken? cancellationToken = null)
         {
             P2P.P2PClient p2PHelper = new P2P.P2PClient()
@@ -541,6 +510,45 @@ namespace SDKClient.Controllers
             }
 
         }
+
+        private static string SendOnlineFileMessage(string path, string to, string resourceId, long fileSize, string ip, int port, SDKProperty.SessionType sessionType = SessionType.CommonChat)
+        {
+            string id;
+            MessagePackage package = new MessagePackage()
+            {
+                from = SDKClient.Instance.property.CurrentAccount.userID.ToString(),
+                to = to,
+                id = SDKProperty.RNGId
+            };
+            id = package.id;
+            Task.Run(() =>
+            {
+                package.data = new message()
+                {
+                    body = new OnlineFileBody()
+                    {
+                        fileSize = fileSize,
+                        fileName = path,
+                        id = resourceId,
+                        IP = ip,
+                        Port = port
+                    },
+                    subType = nameof(SDKProperty.MessageType.onlinefile),
+                    chatType = (int)sessionType,
+                    senderInfo = new message.SenderInfo()
+                    {
+                        photo = SDKClient.Instance.property.CurrentAccount.photo,
+                        userName = SDKClient.Instance.property.CurrentAccount.userName
+                    },
+                    type = nameof(chatType.chat)
+                };
+                package.Send(SDKClient.Instance.ec);
+            });
+            return id;
+        }
+
+        
+        
     }
 
 }

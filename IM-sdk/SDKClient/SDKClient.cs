@@ -45,12 +45,10 @@ namespace SDKClient
         public event EventHandler<PackageInfo> NewDataRecv; //转发服务端数据
         public event EventHandler<P2PPackage> P2PDataRecv; //p2p消息处理
         public event EventHandler<OfflineMessageContext> OffLineMessageEventHandle; //转发离线聊天消息
-                                                                                    
        
         private static bool needStop = false;
         public readonly SDKProperty property = new SDKProperty();//SDK挂载的属性集对象
-        public static SDKClient Instance { get; } = new SDKClient();
-
+        public static readonly SDKClient Instance  = new SDKClient();
         
         //心跳定时器
         public System.Threading.Timer timer = null;
@@ -289,53 +287,63 @@ namespace SDKClient
         /// <summary>
         /// 重连，分QR服务器重连和IM服务器重连，通过property.State识别
         /// </summary>
-        internal async Task<int> ReConn()
+        public async void StartReConn()
         {
             if (!needStop && property.RaiseConnEvent)
             {
-                try
+
+                //没有开始连接，发送连接请求,过滤掉重复请求
+                if (System.Threading.Interlocked.CompareExchange(ref property.ConnState, 1, 0) == 0)
                 {
-                    //没有开始连接，发送连接请求
-                    if (System.Threading.Interlocked.CompareExchange(ref property.ConnState, 1, 0) == 0)
+                    ConnState?.BeginInvoke(this, false, null, null);
+                    property.RaiseConnEvent = false;
+                    if (ec.IsConnected)//已连接断开重新连接
+                        SendLogout(LogoutModel.Logout_self);
+                    if (property.remotePoint == null)
                     {
-                        ConnState?.BeginInvoke(this, false, null, null);//通知UI目前已断网
-                        if (ec.IsConnected)//已连接断开重新连接
-                            SendLogout(LogoutModel.Logout_self);
-                        if (property.remotePoint == null)
+                        if (property.State > ServerState.NotStarted)
                         {
-                            if (property.State > ServerState.NotStarted)
-                            {
-                                //连接IM服务器
-                                property.remotePoint = new IPEndPoint(property.IMServerIP, ProtocolBase.IMPort);
 
-                            }
-                            else
-                            {
-                                //连接QR服务器
-                                property.remotePoint = new System.Net.IPEndPoint(property.QrServerIP, ProtocolBase.QrLoginPort);
+                            property.remotePoint = new IPEndPoint(property.IMServerIP, ProtocolBase.IMPort);
 
-                            }
                         }
-                        logger.Info($"开始重连: {property.remotePoint.ToString()}");
-                       
-                        InitSocketAsync();
-                        return  await ec.ConnectAsync(property.remotePoint);
+                        else
+                        {
+                            property.remotePoint = new System.Net.IPEndPoint(property.QrServerIP, ProtocolBase.QrLoginPort);
+
+
+                        }
 
                     }
+                    logger.Info($"开始重连: {property.remotePoint.ToString()}");
+                    try
+                    {
+                        InitSocketAsync();
+                        bool success = false;
+                        do
+                        {
+                            success = await ec.ConnectAsync(property.remotePoint).ConfigureAwait(false);
+                            if (!success)//连接失败
+                            {
+                                logger.Error($"连接失败:{property.CurrentAccount.Session}");
+                                //延迟10秒自动重连
+                                await Task.Delay(10 * 1000);
+                            }
+                        } while (!success && !needStop);
+                        System.Threading.Interlocked.Exchange(ref property.ConnState, 0);
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.Error(ex.Message);
+                        System.Threading.Interlocked.Exchange(ref property.ConnState, 0);
+                        property.RaiseConnEvent = true;
+                    }
                 }
-                catch (Exception)
-                {
-                    return false;
-
-                }
+             
             }
 
         }
-        public async void StartReConn()
-        {
-            var r = await ReConn();
-
-        }
+       
         /// <summary>
         /// socket已连接
         /// </summary>
@@ -343,10 +351,7 @@ namespace SDKClient
         /// <param name="e"></param>
         void ec_Connected(object sender, EventArgs e)
         {
-           
             logger.Info("连接成功");
-
-#if !CUSTOMSERVER //局域网P2P监听开启
 
             var obj = sender as EasyClientBase;
             if (SDKProperty.P2PServer.ServerState == SuperSocket.SocketBase.ServerState.NotInitialized)
@@ -363,8 +368,6 @@ namespace SDKClient
                 }
 
             }
-#endif
-
             SendConn();
 
             if (timer == null)
@@ -377,11 +380,10 @@ namespace SDKClient
                         {
                             OnSendCommand(new HeartMsgPackage());
                         }
-#if CUSTOMSERVER
-                        timer.Change(5 * 1000, System.Threading.Timeout.Infinite);
-#else
+
+
                         timer?.Change(30 * 1000, System.Threading.Timeout.Infinite);
-#endif
+
                     }
                     else
                     {
@@ -495,13 +497,14 @@ namespace SDKClient
             var result = await ec.ConnectAsync(property.remotePoint);
             return result;
         }
-        bool _isQuickLogon;//是否快速登录
-        string _token; //登录token
+
+        bool _isQuickLogon; //当前登陆
+        string _token; //登陆的token
         /// <summary>
-        /// 扫码登录
+        /// 扫码登陆
         /// </summary>
-        /// <param name="isQuickLogon">是否快速登录</param>
-        /// <param name="token">登录token</param>
+        /// <param name="isQuickLogon">是否快速登陆</param>
+        /// <param name="token">快速登陆用户的token</param>
         /// <returns></returns>
         public async Task<bool> StartQRLoginAsync(bool isQuickLogon = false, string token = "")
         {
@@ -522,16 +525,14 @@ namespace SDKClient
             System.Net.IPEndPoint iPEndPoint = new System.Net.IPEndPoint(property.QrServerIP, ProtocolBase.QrLoginPort);
             property.CurrentAccount.LoginMode = LoginMode.Scan;
             property.m_StateCode = ServerStateConst.Initializing;
-            property.RaiseConnEvent = true;
+            property.RaiseConnEvent = false;//显示的关闭重连开关
             if (ec.IsConnected)
             {
                 if (iPEndPoint.ToString() == property.remotePoint.ToString())
                     SendConn();
                 else
                 {
-                    //从其他方式切过来，关闭重连信号
-                    property.RaiseConnEvent = false;
-                    await ec.Close();
+                    InitSocketAsync();
                     return await CreateConn(iPEndPoint);
                 }
                 return true;
@@ -1183,49 +1184,14 @@ namespace SDKClient
             return package.id;
 
         }
-        /// <summary>
-        /// 获取入群申请列表
-        /// </summary>
-        /// <param name="groupId"></param>
+       
         
-        public async void GetImDataListIncr()
-        {
-            var items = await IMRequest.GetImDataListIncr();
-            if (items == null || items.data == null)
-                return;
-            
-            if (items.data.contactsItem != null && items.data.contactsItem.Any())
-            {
-                GetContactsListPackage cp = new GetContactsListPackage();
-                cp.data = new GetContactsListPackage.contacts();
-                cp.data.items = items.data.contactsItem;
-                cp.data.userId = items.data.userId;
-                OnNewDataRecv(cp);
-            }
-            if (items.data.myBlackItem != null && items.data.myBlackItem.Any())
-            {
-                GetBlackListPackage bp = new GetBlackListPackage();
-                bp.data = new GetBlackListPackage.Data();
-                bp.data.items = items.data.myBlackItem;
-                bp.data.userId = items.data.userId;
-                OnNewDataRecv(bp);
-            }
-            
-            if (items.data.strangersItem != null && items.data.strangersItem.Any())
-            {
-                GetAttentionListPackage ap = new GetAttentionListPackage();
-                ap.data = new GetAttentionListPackage.Data();
-                ap.data.items = items.data.strangersItem;
-                ap.data.userId = items.data.userId;
-                OnNewDataRecv(ap);
-            }
-          
-
-
-        }
-
       
 
+     
+       
+        #region 公开的功能
+  
         /// <summary>
         /// 扫描最新版本
         /// </summary>
@@ -2101,390 +2067,7 @@ namespace SDKClient
        
 
 #endregion
-#region 客服接口
 
-        public async Task<string> SendCustiomServerMsg(string to, string sessionId, SDKProperty.customOption customOption = customOption.over)
-        {
-            if (string.IsNullOrEmpty(sessionId))
-                return null;
-            return await GetData<string>(() =>
-            {
-                switch (customOption)
-                {
-                    case customOption.conn:
-                        return null;
-                    case customOption.over:
-                        CustomServicePackage customServicePackage = new CustomServicePackage();
-                        customServicePackage.ComposeHead(to, property.CurrentAccount.userID.ToString());
-                        customServicePackage.data = new CustomServicePackage.Data()
-                        {
-                            type = (int)customOption,
-                            sessionId = sessionId
-                        };
-                        customServicePackage.Send(ec);
-
-                        logger.Info($"会话结束\t：sessionId：{sessionId}");
-                        WebAPICallBack.DiminishingSessionItem(sessionId);
-
-                        return customServicePackage.id;
-                    case customOption.requestappraisal:
-                        MessagePackage messagePackage = new MessagePackage();
-                        messagePackage.ComposeHead(to, property.CurrentAccount.userID.ToString());
-                        messagePackage.data = new message()
-                        {
-                            body = new EvalBody()
-                            {
-                                id = sessionId
-                            },
-                            subType = nameof(SDKProperty.MessageType.eval),
-                            senderInfo = new message.SenderInfo()
-                            {
-                                photo = property.CurrentAccount.photo,
-                                userName = property.CurrentAccount.userName
-                            },
-                            type = nameof(SDKProperty.chatType.chat)
-
-
-                        };
-                        messagePackage.Send(ec);
-                        return messagePackage.id;
-
-                    case customOption.responseappraisal:
-                        break;
-
-                    default:
-                        break;
-                }
-                return null;
-
-            }).ConfigureAwait(false);
-        }
-        /// <summary>
-        /// 客服转接
-        /// </summary>
-        /// <param name="to">用户ID</param>
-        /// <param name="exchangeId">新客服服务ID</param>
-        /// <returns></returns>
-        public async Task<bool> SendCustiomExchangeMsg(string to, int exchangeId)
-        {
-
-            if (exchangeId == 0)
-                exchangeId = SDKClient.Instance.property.CurrentAccount.CustomProperty.ServicerId ?? 0;
-
-            if (exchangeId == 0 || exchangeId == SDKClient.Instance.property.CurrentAccount.CustomProperty.ServicerId)
-            {
-                exchangeId = SDKClient.Instance.property.CurrentAccount.CustomProperty.ServicerId ?? 0;
-                var resut = await WebAPICallBack.CustomExchange(to.ToInt(), exchangeId).ConfigureAwait(false);
-                if (resut.code == 1)
-                {
-                    CustomExchangePackage customExchangePackage = new CustomExchangePackage();
-                    customExchangePackage.ComposeHead(to, property.CurrentAccount.userID.ToString());
-                    customExchangePackage.data = new CustomExchangePackage.Data()
-                    {
-                        photo = null,
-                        sessionId = resut.data.sessionid,
-                        userId = resut.data.imopenid.ToInt()
-                    };
-                    customExchangePackage.Send(ec);
-
-
-                    logger.Info($"申请会话\t：新的客服:{exchangeId},userId:{resut.data.imopenid},新的sessionId：{resut.data.sessionid}");
-                    return true;
-                }
-                else
-                {
-                    logger.Info($"申请会话失败\t：to:{to},exchangeId:{exchangeId},code:{resut.code}");
-                    return false;
-                }
-            }
-            else
-            {
-                var resut = await WebAPICallBack.CustomExchange(to.ToInt(), exchangeId, 1).ConfigureAwait(false);
-                if (resut.code == 1)
-                {
-                    CustomExchangePackage customExchangePackage = new CustomExchangePackage();
-                    customExchangePackage.ComposeHead(to, property.CurrentAccount.userID.ToString());
-                    customExchangePackage.data = new CustomExchangePackage.Data()
-                    {
-                        photo = null,
-                        sessionId = resut.data.sessionid,
-                        userId = resut.data.imopenid.ToInt()
-                    };
-                    customExchangePackage.Send(ec);
-
-                    logger.Info($"会话转移\t：新的客服:{exchangeId},userId:{resut.data.imopenid},新的sessionId：{resut.data.sessionid}");
-                    return true;
-                }
-                else
-                {
-                    logger.Info($"会话转移失败\t：to:{resut.data.imopenid},exchangeId:{exchangeId},code:{resut.code}");
-                    return false;
-                }
-            }
-        }
-        public bool SetCustiomServerState(SDKProperty.customState customState)
-        {
-
-            logger.Info($"设置客服状态\t：状态为：{Util.Helpers.Enum.GetDescription<SDKProperty.customState>(customState)}");
-            var response = WebAPICallBack.PostCustomServerState(customState);
-            if (response.code == 1)
-            {
-                return true;
-            }
-            else
-            {
-                return false;
-            }
-
-        }
-        public async Task<List<DTO.CSRoomListEntity.entity>> GetCSRoomlist()
-        {
-
-            var response = await WebAPICallBack.GetCSRoomlist().ConfigureAwait(false);
-            SDKClient.logger.Info($"GetCSRoomlist: {Util.Helpers.Json.ToJson(response)}");
-            if (response != null && response.data != null && response.data.Count > 0)
-            {
-                return response.data.Select(e => new DTO.CSRoomListEntity.entity()
-                {
-                    userId = e.imopenid,
-                    photo = e.photo,
-                    mobile = e.mobile,
-                    shopBackUrl = e.shopBackUrl,
-                    shopId = e.shopId,
-                    shopName = e.shopName,
-                    sessionType = e.sessionType,
-                    sessionId = e.sesssionId
-                }).ToList();
-            }
-            else
-                return new List<DTO.CSRoomListEntity.entity>();
-
-        }
-        public async Task<List<DTO.CSTempCustomItem>> GetTempCSRoomlist()
-        {
-
-            var response = await IMRequest.GetTempCSRoomlist().ConfigureAwait(false);
-            logger.Info(Util.Helpers.Json.ToJson(response));
-            if (response != null && response.entryList != null && response.entryList.Count > 0)
-            {
-                return response.entryList.Select(e =>
-                {
-                    string msg = "";
-                    if (!string.IsNullOrEmpty(e.lastMessage))
-                    {
-                        MessagePackage mp = Util.Helpers.Json.ToObject<MessagePackage>(e.lastMessage);
-                        if (mp != null)
-                        {
-                            switch (mp.data.subType.ToLower())
-                            {
-                                case nameof(SDKProperty.MessageType.txt):
-                                    string txt = mp.data.body.text;
-
-                                    msg = txt;
-                                    break;
-                                case nameof(SDKProperty.MessageType.img):
-
-                                    msg = "[图片]";
-                                    break;
-                                case nameof(SDKProperty.MessageType.retract):
-
-                                    msg = "消息撤回";
-                                    break;
-                                case nameof(SDKProperty.MessageType.eval):
-
-                                    msg = "[对方已评价]";
-
-                                    break;
-                                case nameof(SDKProperty.MessageType.goods):
-
-                                    msg = "[商品链接]";
-
-                                    break;
-                                case nameof(SDKProperty.MessageType.order):
-
-                                    msg = "[订单链接]";
-
-                                    break;
-                                case nameof(SDKProperty.MessageType.custom):
-
-                                    msg = "[商品链接]";
-
-                                    break;
-                                default:
-                                    msg = "";
-                                    break;
-                            }
-                            return new DTO.CSTempCustomItem()
-                            {
-                                userId = e.userId,
-                                photo = e.photo,
-                                userName = e.userName,
-                                message = msg,
-                                UnreadCount = e.count,
-                                msgTime = mp.time ?? DateTime.Now
-
-                            };
-                        }
-                        else
-                        {
-                            return new DTO.CSTempCustomItem()
-                            {
-                                userId = e.userId,
-                                photo = e.photo,
-                                userName = e.userName,
-                                message = msg,
-                                UnreadCount = e.count,
-                                msgTime = DateTime.Now
-
-                            };
-                        }
-
-                    }
-                    else
-                    {
-                        return new DTO.CSTempCustomItem()
-                        {
-                            userId = e.userId,
-                            photo = e.photo,
-                            userName = e.userName,
-                            message = msg,
-                            UnreadCount = e.count,
-                            msgTime = DateTime.Now
-
-                        };
-                    }
-
-
-
-                }).ToList();
-            }
-            else
-                return new List<DTO.CSTempCustomItem>();
-
-        }
-        /// <summary>
-        /// 获取快速回复类别集合
-        /// </summary>
-        /// <param name="cateType">类型类别 1 公共 2 个人</param>
-        /// <returns></returns>
-        public QuickReplycategory GetQuickReplycategory(int cateType)
-        {
-            return WebAPICallBack.GetQuickReplycategory(cateType);
-
-        }
-        /// <summary>
-        /// 获取快速回复上下文
-        /// </summary>
-        /// <param name="cateType">快捷回复类型类别 1 公共快捷 2 个人快捷</param>
-        /// <param name="actionType"></param>
-        /// <returns></returns>
-        public async Task<QuickReplycontent> GetQuickReplycontext(int cateType)
-        {
-            return await WebAPICallBack.GetQuickReplycontext(cateType);
-        }
-        /// <summary>
-        /// 获取客服系统配置
-        /// </summary>
-
-        /// <returns></returns>
-        public async Task<CSSysConfig> GetSysConfig()
-        {
-            return await WebAPICallBack.GetOnLineServicerSysConfig();
-        }
-        public async Task<OnlineStatusEntity> GetfreeServicers()
-        {
-            return await WebAPICallBack.GetfreeServicers().ConfigureAwait(false);
-        }
-        /// <summary>
-        /// 根据日期 获取会话信息
-        /// </summary>
-        /// <param name="userId"></param>
-        /// <param name="date"></param>
-        /// <returns></returns>
-        public async Task<CSSysConfig> GetSessionByDate(int userId, DateTime date)
-        {
-            return await WebAPICallBack.GetSessionDate(date, userId);
-        }
-        /// <summary>
-        /// 获取指定类型的记录项集合
-        /// </summary>
-        /// <param name="cateId">类型ID</param>
-        /// <returns></returns>
-        public QuickReplyCategorycontents GetQuickReplyCategorycontents(int cateId)
-        {
-            return WebAPICallBack.GetQuickReplyCategorycontents(cateId);
-        }
-        /// <summary>
-        /// CURD类型信息
-        /// </summary>
-        /// <param name="editType">1新增，2修改，3删除</param>
-        /// <param name="categoryId">类型ID</param>
-        /// <param name="categoryName">类型名称</param>
-        /// <param name="categoryType">1:公共，2:个人</param>
-        /// <returns>success:是否成功，id:内容项ID</returns>
-        public (bool success, int id) PostQuickReplyCategoryedit(int editType, int categoryId, string categoryName, int categoryType)
-        {
-            return WebAPICallBack.PostQuickReplyCategoryedit(editType, categoryId, categoryName, categoryType);
-        }
-        /// <summary>
-        /// CURD具体记录项的信息
-        /// </summary>
-        /// <param name="editType">1新增，2修改，3删除</param>
-        /// <param name="contentId">记录项ID</param>
-        /// <param name="content">内容</param>
-        /// <param name="categoryId">类型ID</param>
-        /// <returns> success:是否成功，id:内容项ID</returns>
-        public (bool success, int id) PostQuickReplyContentedit(int editType, int contentId, string content, int categoryId)
-        {
-            return WebAPICallBack.PostQuickReplyContentedit(editType, contentId, content, categoryId);
-        }
-        /// <summary>
-        /// 通过手机号查找指定满金店用户
-        /// </summary>
-        /// <param name="mobile"></param>
-        /// <returns></returns>
-        public (bool success, CSRoomListEntity.entity entity) GetUserInfoByMobile(string mobile)
-        {
-            return WebAPICallBack.GetUserInfoByMobile(mobile);
-        }
-        /// <summary>
-        /// 通过手机号查找指定满金店用户
-        /// </summary>
-        /// <param name="mobile"></param>
-        /// <returns></returns>
-        public (bool success, CSRoomListEntity.entity entity) QueryuserByMobile(string mobile)
-        {
-            return WebAPICallBack.QueryuserByMobile(mobile);
-        }
-        public static async Task<HistoryRecordListResp> Getuserhistorylist(int PageIndex = 0)
-        {
-            return await WebAPICallBack.Getuserhistorylist(PageIndex);
-        }
-        public async Task<string> GetAddressByIP(string ip)
-        {
-            var obj = await WebAPICallBack.GetAddressByIP(ip).ConfigureAwait(false);
-            logger.Info($"根据IP获取地址信息\t：ip为：{ip},address:{obj.data}");
-            if (string.IsNullOrEmpty(obj.data))
-                return null;
-            else
-                return obj.data.TrimEnd(',');
-        }
-        /// <summary>
-        /// 领取任务
-        /// </summary>
-        /// <param name="userId">用户的ID</param>
-        /// <returns></returns>
-        public string SendCSSyncMsgStatus(int userId, string photo, string nickName)
-        {
-            CSSyncMsgStatusPackage package = new CSSyncMsgStatusPackage();
-            package.ComposeHead(null, property.CurrentAccount.userID.ToString());
-            package.data = new CSSyncMsgStatusPackage.Data();
-            package.data.userId = userId;
-            package.data.photo = photo;
-            package.data.userName = nickName;
-            return package.Send(ec).id;
-        }
-#endregion
 
     }
 }
