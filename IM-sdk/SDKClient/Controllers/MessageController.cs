@@ -1,8 +1,10 @@
 ﻿using SDKClient.Model;
+using SDKClient.P2P;
 using SDKClient.Protocol;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Net;
 using System.Threading.Tasks;
 using Util;
 using Util.ImageOptimizer;
@@ -418,16 +420,127 @@ namespace SDKClient.Controllers
             Util.Helpers.Async.Run(async () => await DAL.DALMessageHelper.UpdateMsgHidden(msgId));
         }
         /// <summary>
-        /// 变更消息
+        /// 变更消息为通知类型
         /// </summary>
         /// <param name="msgId"></param>
         /// <param name="content">内容</param>
-        /// <param name="messageType"></param>
-        public static void UpdateHistoryMsgContent(string msgId, string content, SDKProperty.MessageType messageType = SDKProperty.MessageType.notification)
+        public static void UpdateHistoryMsgToNotification(string msgId, string content)
         {
-            Util.Helpers.Async.Run(async () => await DAL.DALMessageHelper.UpdateMsgContent(msgId, content, messageType));
+            Util.Helpers.Async.Run(async () => await DAL.DALMessageHelper.UpdateMsgContent(msgId, content, SDKProperty.MessageType.notification));
+        }
+        private static string SendOnlineFileMessage(string path, string to, string resourceId, long fileSize, string ip, int port, SDKProperty.SessionType sessionType = SessionType.CommonChat)
+        {
+            string id;
+            MessagePackage package = new MessagePackage()
+            {
+                from = SDKClient.Instance.property.CurrentAccount.userID.ToString(),
+                to = to,
+                id = SDKProperty.RNGId
+            };
+            id = package.id;
+            Task.Run(() =>
+            {
+                package.data = new message()
+                {
+                    body = new OnlineFileBody()
+                    {
+                        fileSize = fileSize,
+                        fileName = path,
+                        id = resourceId,
+                        IP = ip,
+                        Port = port
+                    },
+                    subType = nameof(SDKProperty.MessageType.onlinefile),
+                    chatType = (int)sessionType,
+                    senderInfo = new message.SenderInfo()
+                    {
+                        photo = SDKClient.Instance.property.CurrentAccount.photo,
+                        userName = SDKClient.Instance.property.CurrentAccount.userName
+                    },
+                    type = nameof(chatType.chat)
+                };
+                package.Send(SDKClient.Instance.ec);
+            });
+            return id;
         }
 
+        public static string SendOnlineFile(int to, string fileFullName, Action<long> SetProgressSize, Action<(int isSuccess, string imgMD5, string imgId, NotificatonPackage notifyPackage)> SendComplete, Action<long> ProgressChanged,
+            System.Threading.CancellationToken? cancellationToken = null)
+        {
+
+            string MD5 = string.Empty;
+            long fileSize = 0;
+            FileInfo info = new FileInfo(fileFullName);
+            fileSize = info.Length;
+            //发送在线文件消息给对方
+            if (cancellationToken != null && !cancellationToken.Value.IsCancellationRequested)
+            {
+                string id = SendOnlineFileMessage(fileFullName, to.ToString(), MD5, fileSize, SDKProperty.P2PServer.GetLocalIP(), SDKProperty.P2PServer.GetLocalPort());
+                P2P.P2PClient p2PHelper = new P2P.P2PClient()
+                {
+                    CancellationToken = cancellationToken,
+                    FileName = fileFullName,
+                    MD5 = MD5,
+                    MsgId = id,
+                    From = SDKClient.Instance.property.CurrentAccount.userID,
+                    To = to,
+                    FileSize = fileSize
+                };
+                p2PHelper.SendComplete += SendComplete;
+                p2PHelper.SetProgressSize += SetProgressSize;
+                p2PHelper.ProgressChanged += ProgressChanged;
+                P2P.P2PClient.FileCache.Add(id, p2PHelper);
+                return id;
+            }
+            else
+                return null;
+
+        }
+        /// <summary>
+        /// 接收在线文件
+        /// </summary>
+        /// <param name="msgId"></param>
+        /// <param name="ip"></param>
+        /// <param name="port"></param>
+        /// <param name="to"></param>
+        /// <param name="fileName"></param>
+        /// <param name="resourceId"></param>
+        /// <param name="SetProgressSize"></param>
+        /// <param name="SendComplete"></param>
+        /// <param name="ProgressChanged"></param>
+        /// <param name="cancellationToken"></param>
+        public static bool RecvOnlineFile(string msgId, string ip, int port, int to, long fileSize, string fileName, string resourceId, Action<long> SetProgressSize, Action<(int isSuccess, string imgMD5, string imgId, NotificatonPackage notifyPackage)> SendComplete, Action<long> ProgressChanged,
+         System.Threading.CancellationToken? cancellationToken = null)
+        {
+            P2P.P2PClient p2PHelper = new P2P.P2PClient()
+            {
+                CancellationToken = cancellationToken,
+                FileName = fileName,
+                RemotePort = port,
+                RemoteIP = IPAddress.Parse(ip),
+                From = to,
+                To = SDKClient.Instance.property.CurrentAccount.userID,
+                MD5 = resourceId,
+                MsgId = msgId,
+                FileSize = fileSize
+            };
+            p2PHelper.SendComplete += SendComplete;
+            p2PHelper.SetProgressSize += SetProgressSize;
+            p2PHelper.ProgressChanged += ProgressChanged;
+            SDKClient.Instance.property.SendP2PList.Add(p2PHelper);
+            if (p2PHelper.TryConnect())
+            {
+                p2PHelper.SendHeader();
+
+                return true;
+            }
+            else
+            {
+
+                return false;
+            }
+
+        }
     }
 
 }

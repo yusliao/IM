@@ -36,12 +36,12 @@ namespace SDKClient
     public class SDKClient
     {
         [ImportMany(typeof(CommandBase))]
-        private IEnumerable<CommandBase> CommmandSet { get; set; }  //命令集合
+        internal IEnumerable<CommandBase> CommmandSet { get; set; }  //命令集合
         [ImportMany(typeof(Util.Dependency.ConfigBase))]
         private IEnumerable<Util.Dependency.ConfigBase> EntityConfigs { get; set; }
         internal  EasyClient<PackageInfo> ec = new EasyClient<PackageInfo>();//通讯接口对象
 
-        internal static Util.Logs.ILog logger = Util.Logs.Log.GetLog();//日志对象
+        internal static Util.Logs.ILog logger = Util.Logs.Log.GetLog(typeof(SDKClient));//日志对象
         public event EventHandler<PackageInfo> NewDataRecv; //转发服务端数据
         public event EventHandler<P2PPackage> P2PDataRecv; //p2p消息处理
         public event EventHandler<OfflineMessageContext> OffLineMessageEventHandle; //转发离线聊天消息
@@ -198,22 +198,8 @@ namespace SDKClient
             }
         }
 
-       
-       
-
         private SDKClient()
         {
-            //#region 通讯组件配置
-            //ec.Initialize(new RecvFilter2());
-            //ec.NewPackageReceived += Ec_NewPackageReceived;
-            //ec.Error += ec_Error;
-            //ec.Connected += ec_Connected;
-            //ec.Closed += ec_Closed;
-
-            //#endregion；
-           
-
-
             #region MEF配置
             MyComposePart();
             #endregion
@@ -280,7 +266,6 @@ namespace SDKClient
             ec.Closed += ec_Closed;
         }
 
-
         void MyComposePart()
         {
             var catalog = new AssemblyCatalog(Assembly.GetExecutingAssembly());
@@ -302,66 +287,53 @@ namespace SDKClient
             StartReConn();
         }
         /// <summary>
-        /// 重连
+        /// 重连，分QR服务器重连和IM服务器重连，通过property.State识别
         /// </summary>
-        public async void StartReConn()
+        internal async Task<int> ReConn()
         {
             if (!needStop && property.RaiseConnEvent)
             {
-
                 try
                 {
-
-
-
                     //没有开始连接，发送连接请求
                     if (System.Threading.Interlocked.CompareExchange(ref property.ConnState, 1, 0) == 0)
                     {
-
+                        ConnState?.BeginInvoke(this, false, null, null);//通知UI目前已断网
                         if (ec.IsConnected)//已连接断开重新连接
                             SendLogout(LogoutModel.Logout_self);
                         if (property.remotePoint == null)
                         {
                             if (property.State > ServerState.NotStarted)
                             {
-
+                                //连接IM服务器
                                 property.remotePoint = new IPEndPoint(property.IMServerIP, ProtocolBase.IMPort);
 
                             }
                             else
                             {
+                                //连接QR服务器
                                 property.remotePoint = new System.Net.IPEndPoint(property.QrServerIP, ProtocolBase.QrLoginPort);
 
                             }
                         }
-                        // timer = null;
                         logger.Info($"开始重连: {property.remotePoint.ToString()}");
-                        ConnState?.BeginInvoke(this, false, null, null);
+                       
                         InitSocketAsync();
-                        var success = await ec.ConnectAsync(property.remotePoint).ConfigureAwait(false);
-                        if (!success)//连接失败
-                        {
-                            logger.Error($"连接失败:{property.CurrentAccount.Session}");
-                            //延迟10秒自动重连
-                            Task.Delay(10 * 1000).ContinueWith((t) =>
-                            {
-                                System.Threading.Interlocked.Exchange(ref property.ConnState, 0);
-                                StartReConn();
-                            });
-                        }
-                        System.Threading.Interlocked.Exchange(ref property.ConnState, 0);
-
-
-
+                        return  await ec.ConnectAsync(property.remotePoint);
 
                     }
                 }
                 catch (Exception)
                 {
+                    return false;
 
-                    throw;
                 }
             }
+
+        }
+        public async void StartReConn()
+        {
+            var r = await ReConn();
 
         }
         /// <summary>
@@ -371,10 +343,10 @@ namespace SDKClient
         /// <param name="e"></param>
         void ec_Connected(object sender, EventArgs e)
         {
-            //   System.Threading.Interlocked.Exchange(ref property.ConnState, 0);
+           
             logger.Info("连接成功");
 
-#if !CUSTOMSERVER
+#if !CUSTOMSERVER //局域网P2P监听开启
 
             var obj = sender as EasyClientBase;
             if (SDKProperty.P2PServer.ServerState == SuperSocket.SocketBase.ServerState.NotInitialized)
@@ -392,7 +364,9 @@ namespace SDKClient
 
             }
 #endif
+
             SendConn();
+
             if (timer == null)
             {
                 timer = new System.Threading.Timer(o =>
@@ -402,8 +376,6 @@ namespace SDKClient
                         if (SDKClient.Instance.property.RaiseConnEvent)
                         {
                             OnSendCommand(new HeartMsgPackage());
-                            //CommandBase.SendHeart(ec);
-
                         }
 #if CUSTOMSERVER
                         timer.Change(5 * 1000, System.Threading.Timeout.Infinite);
@@ -434,10 +406,6 @@ namespace SDKClient
         void ec_Error(object sender, SuperSocket.ClientEngine.ErrorEventArgs e)
         {
             logger.Error($"{e.Exception.Message}");
-
-            //  StartReConn();
-
-
         }
         /// <summary>
         /// 开始连接
@@ -503,12 +471,10 @@ namespace SDKClient
             if (property.State > ServerState.NotStarted)
             {
                 property.RaiseConnEvent = false;
-#if DEBUG
-                property.IMServerIP = IPAddress.Parse(ProtocolBase.IMIP);
-#else
+
                 IPHostEntry iPHostEntry = Dns.GetHostEntry(ProtocolBase.IMIP);
                 property.IMServerIP = iPHostEntry.AddressList[0];
-#endif
+
                 property.remotePoint = new IPEndPoint(property.IMServerIP, ProtocolBase.IMPort);
             }
             else//扫码连接阶段
@@ -529,8 +495,14 @@ namespace SDKClient
             var result = await ec.ConnectAsync(property.remotePoint);
             return result;
         }
-        bool _isQuickLogon;
-        string _token;
+        bool _isQuickLogon;//是否快速登录
+        string _token; //登录token
+        /// <summary>
+        /// 扫码登录
+        /// </summary>
+        /// <param name="isQuickLogon">是否快速登录</param>
+        /// <param name="token">登录token</param>
+        /// <returns></returns>
         public async Task<bool> StartQRLoginAsync(bool isQuickLogon = false, string token = "")
         {
             _isQuickLogon = isQuickLogon;
@@ -539,6 +511,7 @@ namespace SDKClient
             {
                 IPHostEntry iPHostEntry = Dns.GetHostEntry(ProtocolBase.QrLoginIP);
                 property.QrServerIP = iPHostEntry.AddressList[0];
+
             }
             catch (Exception ex)
             {
@@ -568,6 +541,7 @@ namespace SDKClient
                 return await CreateConn(iPEndPoint);
             }
         }
+
         /// <summary>
         /// 开始处理聊天消息
         /// </summary>
@@ -575,7 +549,6 @@ namespace SDKClient
         {
             property.CanHandleMsg = 2;
             logger.Info("CanHandleMsg 值修改为:2");
-
         }
         /// <summary>
         /// 关闭连接
@@ -583,7 +556,7 @@ namespace SDKClient
         /// <returns></returns>
         public async Task<bool> StopAsync()
         {
-            logger.Error($"停止通讯-{property.CurrentAccount.Session}");
+            logger.Info($"停止通讯-{property.CurrentAccount.Session}");
             needStop = true;
             return await ec.Close();
 
@@ -597,8 +570,6 @@ namespace SDKClient
         /// <param name="e"></param>
         private void Ec_NewPackageReceived(object sender, PackageEventArgs<PackageInfo> e)
         {
-            //string str = Util.Helpers.Json.ToJson(e.Package);
-            //networkMsgRecv?.BeginInvoke(this,str,null,null);
 
             if (e.Package.apiId == ProtocolBase.HeartMsgCode || e.Package.apiId == ProtocolBase.NoHandlePackageCode)
                 return;
@@ -680,7 +651,7 @@ namespace SDKClient
                 receiverId = packageInfo.to.ToInt(),
                 senderId = packageInfo.from.ToInt()
             };
-            WebAPICallBack.AddMsgFaceBack(errorPackage);
+            Task.Run(() => WebAPICallBack.AddMsgFaceBack(errorPackage));
         }
 
         internal void OnNewDataRecv(PackageInfo info)
@@ -714,10 +685,10 @@ namespace SDKClient
             }
             else if (_isQuickLogon)
             {
-                QuickLogonMsg();
+                QRController.QuickLogonMsg();
             }
             else
-                GetLoginQRCode();
+                QRController.GetLoginQRCode();
         }
      
        
@@ -969,153 +940,7 @@ namespace SDKClient
 
         }
 
-
-      
-        public void GetLaunchFile()
-        {
-            try
-            {
-
-                System.Net.WebClient client = new System.Net.WebClient();
-                //client.UploadProgressChanged += Client_UploadProgressChanged; ;
-                client.DownloadDataCompleted += Client_DownloadDataCompleted;
-                client.Headers.Add(System.Net.HttpRequestHeader.ContentType, "application/json");
-                client.DownloadDataAsync(new Uri(ProtocolBase.downLoadUpdateFile));
-            }
-            catch
-            {
-
-            }
-        }
-
-        private static void Client_DownloadDataCompleted(object s, System.Net.DownloadDataCompletedEventArgs e)
-        {
-            try
-            {
-                if (((WebClient)s).ResponseHeaders.GetValue("Content-Type") != "application/json")
-                {
-                    if (e.Error == null && e.Cancelled == false && e.Result.Length > 0)
-                    {
-                        var version = ((WebClient)s).ResponseHeaders.GetValue("subgradeVersion");
-                        var data = e.Result;
-                        var fileName = "IMLaunch.exe";
-                        var basePath = AppDomain.CurrentDomain.BaseDirectory;
-                        if (File.Exists(basePath + fileName))
-                        {
-                            var lst = System.Diagnostics.Process.GetProcessesByName("IMLaunch");
-                            foreach (var item in lst)
-                            {
-                                item.Kill();
-                            }
-                            File.Delete(basePath + fileName);
-                            File.WriteAllBytes(Path.Combine(basePath, fileName), data);
-                        }
-                        else
-                        {
-                            File.WriteAllBytes(Path.Combine(basePath, fileName), data);
-                        }
-                        var config = System.Configuration.ConfigurationManager.OpenExeConfiguration("IMUI.exe");
-                        //string version = "0";
-                        if (config.AppSettings.Settings["updateversion"] != null)
-                        {
-                            logger.Info($"升级包版本号：" + config.AppSettings.Settings["updateversion"].Value);
-                            config.AppSettings.Settings["updateversion"].Value = version;
-                            config.Save();
-                        }
-                        else
-                        {
-                            config.AppSettings.Settings.Add("updateversion", version);
-                            config.Save();
-                        }
-
-                        ConfigurationManager.RefreshSection("appSettings");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                logger.Error($"下载升级文件失败;message:{ex.Message}");
-            }
-        }
-        public string SendOnlineFile(int to, string fileFullName, Action<long> SetProgressSize, Action<(int isSuccess, string imgMD5, string imgId, NotificatonPackage notifyPackage)> SendComplete, Action<long> ProgressChanged,
-            System.Threading.CancellationToken? cancellationToken = null)
-        {
-
-            string MD5 = string.Empty;
-            long fileSize = 0;
-            FileInfo info = new FileInfo(fileFullName);
-            fileSize = info.Length;
-            //发送在线文件消息给对方
-            if (cancellationToken != null && !cancellationToken.Value.IsCancellationRequested)
-            {
-                string id = SendOnlineFileMessage(fileFullName, to.ToString(), MD5, fileSize, SDKProperty.P2PServer.GetLocalIP(), SDKProperty.P2PServer.GetLocalPort());
-                P2P.P2PClient p2PHelper = new P2P.P2PClient()
-                {
-                    CancellationToken = cancellationToken,
-                    FileName = fileFullName,
-                    MD5 = MD5,
-                    MsgId = id,
-                    From = property.CurrentAccount.userID,
-                    To = to,
-                    FileSize = fileSize
-                };
-                p2PHelper.SendComplete += SendComplete;
-                p2PHelper.SetProgressSize += SetProgressSize;
-                p2PHelper.ProgressChanged += ProgressChanged;
-                P2P.P2PClient.FileCache.Add(id, p2PHelper);
-                return id;
-            }
-            else
-                return null;
-
-        }
-
-
-        /// <summary>
-        /// 接收在线文件
-        /// </summary>
-        /// <param name="msgId"></param>
-        /// <param name="ip"></param>
-        /// <param name="port"></param>
-        /// <param name="to"></param>
-        /// <param name="fileName"></param>
-        /// <param name="resourceId"></param>
-        /// <param name="SetProgressSize"></param>
-        /// <param name="SendComplete"></param>
-        /// <param name="ProgressChanged"></param>
-        /// <param name="cancellationToken"></param>
-        public bool RecvOnlineFile(string msgId, string ip, int port, int to, long fileSize, string fileName, string resourceId, Action<long> SetProgressSize, Action<(int isSuccess, string imgMD5, string imgId, NotificatonPackage notifyPackage)> SendComplete, Action<long> ProgressChanged,
-         System.Threading.CancellationToken? cancellationToken = null)
-        {
-            P2P.P2PClient p2PHelper = new P2P.P2PClient()
-            {
-                CancellationToken = cancellationToken,
-                FileName = fileName,
-                RemotePort = port,
-                RemoteIP = IPAddress.Parse(ip),
-                From = to,
-                To = property.CurrentAccount.userID,
-                MD5 = resourceId,
-                MsgId = msgId,
-                FileSize = fileSize
-            };
-            p2PHelper.SendComplete += SendComplete;
-            p2PHelper.SetProgressSize += SetProgressSize;
-            p2PHelper.ProgressChanged += ProgressChanged;
-            property.SendP2PList.Add(p2PHelper);
-            if (p2PHelper.TryConnect())
-            {
-                p2PHelper.SendHeader();
-
-                return true;
-            }
-            else
-            {
-
-                return false;
-            }
-
-        }
+     
 
        
         
@@ -1123,195 +948,7 @@ namespace SDKClient
 
 
 
-        public string SendImgMessage(string path, string to, string resourceId, string smallresourceId,
-            chatType type = chatType.chat, System.Threading.CancellationToken? cancellationToken = null, string groupName = null, SDKProperty.SessionType sessionType = SessionType.CommonChat, string imgId = "")
-        {
-            MessagePackage package = new MessagePackage();
-            package.ComposeHead(to, property.CurrentAccount.userID.ToString());
-            if (!string.IsNullOrEmpty(imgId))
-                package.id = imgId;
-            string width = string.Empty, height = string.Empty;
-            try
-            {
-                using (var bmp = new System.Drawing.Bitmap(path))
-                {
-                    width = bmp.Width.ToString();
-                    height = bmp.Height.ToString();
-                }
-            }
-            catch (Exception ex)
-            {
-                SDKClient.logger.Error($"发送图片消息提取图片宽高：error:{ex.Message},stack:{ex.StackTrace};\r\n");
-            }
-            if (to == property.CurrentAccount.userID.ToString())
-            {
-
-            }
-            package.data = new message()
-            {
-                body = new ImgBody()
-                {
-                    fileName = path,
-                    id = resourceId,
-                    smallId = smallresourceId,
-                    width = width,
-                    height = height
-                },
-                senderInfo = new message.SenderInfo()
-                {
-                    photo = property.CurrentAccount.photo,
-                    userName = property.CurrentAccount.userName ?? property.CurrentAccount.loginId
-                },
-                subType = "img",
-                chatType = to == property.CurrentAccount.userID.ToString() ? (int)SessionType.FileAssistant : (int)sessionType,
-                type = type == chatType.chat ? nameof(chatType.chat) : nameof(chatType.groupChat)
-            };
-            if (type == chatType.groupChat)
-            {
-                package.data.groupInfo = new message.msgGroup()
-                {
-                    groupId = to.ToInt(),
-                    groupName = groupName
-                };
-            }
-
-            if (cancellationToken != null && cancellationToken.HasValue)
-            {
-                if (!cancellationToken.Value.IsCancellationRequested)
-                    package.Send(ec);
-            }
-            else
-                package.Send(ec);
-            return package.id;
-        }
-
-        public string SendFileMessage(string path, string to, string resourceId, long fileSize, chatType type = chatType.chat, string groupName = null, int width = 0, int height = 0, string imgMD5 = null, SDKProperty.SessionType sessionType = SessionType.CommonChat, string msgId = "")
-        {
-            MessagePackage package = new MessagePackage()
-            {
-                from = property.CurrentAccount.userID.ToString(),
-                to = to,
-                id = string.IsNullOrEmpty(msgId) ? SDKProperty.RNGId : msgId
-            };
-            package.data = new message()
-            {
-                body = new fileBody()
-                {
-                    fileSize = fileSize,
-                    fileName = path,
-                    id = resourceId,
-                    width = width,
-                    height = height,
-                    img = imgMD5
-                },
-                chatType = to == property.CurrentAccount.userID.ToString() ? (int)SessionType.FileAssistant : (int)sessionType,
-                subType = "file",
-                senderInfo = new message.SenderInfo()
-                {
-                    photo = property.CurrentAccount.photo,
-                    userName = property.CurrentAccount.userName
-                },
-                type = type == chatType.chat ? nameof(chatType.chat) : nameof(chatType.groupChat)
-            };
-
-            if (type == chatType.groupChat)
-            {
-                package.data.groupInfo = new message.msgGroup()
-                {
-                    groupId = to.ToInt(),
-                    groupName = groupName
-                };
-            }
-
-            package.Send(ec);
-            return package.id;
-        }
-        public string SendFiletoDB(string path, string to, string resourceId, long fileSize, chatType type = chatType.chat, string groupName = null, int width = 0, int height = 0, string imgMD5 = null, SDKProperty.SessionType sessionType = SessionType.CommonChat, string msgId = "")
-        {
-            MessagePackage package = new MessagePackage()
-            {
-                from = property.CurrentAccount.userID.ToString(),
-                to = to,
-                id = string.IsNullOrEmpty(msgId) ? SDKProperty.RNGId : msgId
-            };
-            package.data = new message()
-            {
-                body = new fileBody()
-                {
-                    fileSize = fileSize,
-                    fileName = Path.GetFileName(path),
-                    id = resourceId,
-                    width = width,
-                    height = height,
-                    img = imgMD5
-                },
-              
-                chatType = to == property.CurrentAccount.userID.ToString() ? (int)SessionType.FileAssistant : (int)sessionType,
-                subType = "file",
-                senderInfo = new message.SenderInfo()
-                {
-                    photo = property.CurrentAccount.photo,
-                    userName = property.CurrentAccount.userName
-                },
-                type = type == chatType.chat ? nameof(chatType.chat) : nameof(chatType.groupChat)
-            };
-
-            if (type == chatType.groupChat)
-            {
-                package.data.groupInfo = new message.msgGroup()
-                {
-                    groupId = to.ToInt(),
-                    groupName = groupName
-                };
-            }
-            Util.Helpers.Async.Run(async () => await DAL.DALMessageHelper.SendFiletoDB(package));
-
-            return package.id;
-        }
-        public string SendSmallVideoMessage(string path, string to, string recordTime, string resourceId, string previewId, int width, int height, long fileSize, chatType type = chatType.chat, string groupName = null, SDKProperty.SessionType sessionType = SessionType.CommonChat, string msgId = "")
-        {
-            MessagePackage package = new MessagePackage()
-            {
-                from = property.CurrentAccount.userID.ToString(),
-                to = to,
-                id = string.IsNullOrEmpty(msgId) ? SDKProperty.RNGId : msgId,
-            };
-            package.data = new message()
-            {
-                body = new smallVideoBody()
-                {
-                    fileSize = fileSize,
-                    fileName = path,
-                    id = resourceId,
-                    previewId = previewId,
-                    width = width,
-                    height = height,
-
-                    recordTime = recordTime
-
-                },
-                subType = Util.Helpers.Enum.GetDescription<SDKProperty.MessageType>(SDKProperty.MessageType.smallvideo),
-                chatType = to == property.CurrentAccount.userID.ToString() ? (int)SessionType.FileAssistant : (int)sessionType,
-                senderInfo = new message.SenderInfo()
-                {
-                    photo = property.CurrentAccount.photo,
-                    userName = property.CurrentAccount.userName
-                },
-                type = type == chatType.chat ? nameof(chatType.chat) : nameof(chatType.groupChat)
-            };
-
-            if (type == chatType.groupChat)
-            {
-                package.data.groupInfo = new message.msgGroup()
-                {
-                    groupId = to.ToInt(),
-                    groupName = groupName
-                };
-            }
-
-            package.Send(ec);
-            return package.id;
-        }
+     
         /// <summary>
         /// 设置群组的管理
         /// </summary>
@@ -1334,56 +971,7 @@ namespace SDKClient
             groupPackage.Send(ec);
             return groupPackage.id;
         }
-        private string SendOnlineFileMessage(string path, string to, string resourceId, long fileSize, string ip, int port, SDKProperty.SessionType sessionType = SessionType.CommonChat)
-        {
-            string id;
-            MessagePackage package = new MessagePackage()
-            {
-                from = property.CurrentAccount.userID.ToString(),
-                to = to,
-                id = SDKProperty.RNGId
-            };
-            id = package.id;
-            Task.Run(() =>
-            {
-                package.data = new message()
-                {
-                    body = new OnlineFileBody()
-                    {
-                        fileSize = fileSize,
-                        fileName = path,
-                        id = resourceId,
-                        IP = ip,
-                        Port = port
-                    },
-                    subType = nameof(SDKProperty.MessageType.onlinefile),
-                    chatType = (int)sessionType,
-                    senderInfo = new message.SenderInfo()
-                    {
-                        photo = property.CurrentAccount.photo,
-                        userName = property.CurrentAccount.userName
-                    },
-                    type = nameof(chatType.chat)
-                };
-                package.Send(ec);
-            });
-            return id;
-        }
-
-        /// <summary>
-        /// 发送文件消息
-        /// </summary>
-        /// <param name="fileFullName">文件全路径</param>
-        /// <param name="SetProgressSize">设置进度条大小</param>
-        /// <param name="SendComplete">发送成功CB</param>
-        /// <param name="ProgressChanged">进度条变化CB</param>
-        /// <param name="to">目标ID</param>
-        /// <param name="type">聊天类型<see cref="SDKProperty.chatType"/></param>
-        /// <param name="cancellationToken">取消结构体对象</param>
-        /// <param name="messageType">消息类型<see cref="SDKProperty.MessageType"/></param>
-        /// <param name="groupName">如果type=[<see cref="SDKProperty.chatType.groupChat"/>]，需要提供群名称</param>
-        /// <param name="imgFullName">缩略图全路径</param>
-        /// <returns></returns>
+        
        
        
         public async void UpdateMsgFileName(string msgId, string fileName)
@@ -1599,143 +1187,7 @@ namespace SDKClient
         /// 获取入群申请列表
         /// </summary>
         /// <param name="groupId"></param>
-        public void GetJoinGroupList(int groupId)
-        {
-            var lst = Util.Helpers.Async.Run(async () => await DAL.DALJoinGroupHelper.GetJoinGroupList(groupId).ConfigureAwait(false));
-            foreach (var item in lst)
-            {
-                var obj = Util.Helpers.Json.ToObject<JoinGroupPackage>(item.JoinGroupPackage);
-                SDKClient.Instance.OnNewDataRecv(obj);
-            }
-        }
-        public string GetGroupList()
-        {
-            var card = SDKClient.Instance.property.CurrentAccount.imei ?? System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces().FirstOrDefault(N => N.NetworkInterfaceType != System.Net.NetworkInformation.NetworkInterfaceType.Loopback)?.GetPhysicalAddress().ToString();
-
-            if (SDKClient.Instance.property.CurrentAccount.preimei == card)
-            {
-                var dbobj = Util.Helpers.Async.Run(async () => await DAL.DALGroupOptionHelper.GetGroupListPackage());
-                if (dbobj != null && dbobj.getGroupListPackage != null)
-                {
-                    var groupListPackage = Util.Helpers.Json.ToObject<GetGroupListPackage>(dbobj.getGroupListPackage);
-                    SDKClient.Instance.OnNewDataRecv(groupListPackage);
-                }
-
-            }
-            GetGroupListPackage package = new GetGroupListPackage();
-            package.ComposeHead(property.ServerJID, property.CurrentAccount.userID.ToString());
-            package.data = new grouplist()
-            {
-                max = 100,
-                min = 1,
-                groupType = 0, //普通群
-                userId = property.CurrentAccount.userID
-
-            };
-            var obj = IMRequest.GetGroupListPackage(package);
-            if (obj != null && obj.code == 0)
-            {
-                var groupListPackage = obj;
-                if (groupListPackage != null)
-                {
-                    try
-                    {
-                        var cmd = CommmandSet.FirstOrDefault(c => c.Name == groupListPackage.api);
-                        cmd?.ExecuteCommand(ec, groupListPackage);//日志及入库操作
-
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.Error($"获取群列表数据处理异常：error:{ex.Message},stack:{ex.StackTrace};\r\ncontent:{Util.Helpers.Json.ToJson(groupListPackage)}");
-
-                        System.Threading.Interlocked.CompareExchange(ref SDKClient.Instance.property.CanHandleMsg, 2, 1);
-                        logger.Info("CanHandleMsg 值修改为:2");
-                    }
-                }
-            }
-            else
-            {
-
-            }
-            //package.Send(ec);
-            return package.id;
-        }
-        /// <summary>
-        /// 获取单个群成员信息
-        /// </summary>
-        /// <param name="userId">查看着ID</param>
-        /// <param name="groupId">群ID</param>
-        /// <param name="partnerId">被查看着ID</param>
-        /// <returns></returns>
-        public string GetGroupMember(int userId, int groupId, int partnerId)
-        {
-
-            GetGroupMemberPackage package = new GetGroupMemberPackage();
-            package.ComposeHead(property.ServerJID, property.CurrentAccount.userID.ToString());
-
-            package.data = new GetGroupMemberPackage.Data
-            {
-                groupId = groupId,
-                userId = userId,
-                partnerId = partnerId
-            };
-            package.Send(ec);
-            return package.id;
-        }
-        public string GetGroupMemberList(int groupId, bool isLoaclData = false)
-        {
-
-            //var dbobj = Util.Helpers.Async.Run(async () => await DAL.DALGroupOptionHelper.GetGroupListPackage());
-
-            var card = SDKClient.Instance.property.CurrentAccount.imei ?? System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces().FirstOrDefault(N => N.NetworkInterfaceType != System.Net.NetworkInformation.NetworkInterfaceType.Loopback)?.GetPhysicalAddress().ToString();
-
-
-            if (isLoaclData && SDKClient.Instance.property.CurrentAccount.preimei == card)
-            {
-                var dbobj = Util.Helpers.Async.Run(async () => await DAL.DALGroupOptionHelper.GetGroupMemberListPackage(groupId));
-                if (dbobj != null && dbobj.getGroupMemberListPackage != null)
-                {
-                    var groupListPackage = Util.Helpers.Json.ToObject<GetGroupMemberListPackage>(dbobj.getGroupMemberListPackage);
-                    SDKClient.Instance.OnNewDataRecv(groupListPackage);
-                }
-            }
-            GetGroupMemberListPackage package = new GetGroupMemberListPackage();
-            package.ComposeHead(property.ServerJID, property.CurrentAccount.userID.ToString());
-            package.data = new groupmemberlist()
-            {
-                max = 100,
-                min = 1,
-                groupId = groupId //普通群
-            };
-            var obj = IMRequest.GetMemberList(package);
-            if (obj != null)
-            {
-                var groupMemberListPackage = obj;
-                if (groupMemberListPackage != null)
-                {
-                    try
-                    {
-                        var cmd = CommmandSet.FirstOrDefault(c => c.Name == groupMemberListPackage.api);
-                        cmd?.ExecuteCommand(ec, groupMemberListPackage);//日志及入库操作
-
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.Error($"获取群成员数据处理异常：error:{ex.Message},stack:{ex.StackTrace};\r\ncontent:{Util.Helpers.Json.ToJson(groupMemberListPackage)}");
-
-                        System.Threading.Interlocked.CompareExchange(ref SDKClient.Instance.property.CanHandleMsg, 2, 1);
-                        logger.Info("CanHandleMsg 值修改为:2");
-                    }
-                }
-            }
-            else
-            {
-
-            }
-            //package.Send(ec).id
-            return package.id;
-
-        }
+        
         public async void GetImDataListIncr()
         {
             var items = await IMRequest.GetImDataListIncr();
@@ -1772,62 +1224,7 @@ namespace SDKClient
 
         }
 
-        /// <summary>
-        /// 获取二维码图片
-        /// </summary>
-        /// <param name="Id">个人或者群组编号</param>
-        /// <param name="userOrgroup">1:个人；2：群</param>
-        /// <returns></returns>
-        public string GetQrCodeImg(string Id, string userOrgroup)
-        {
-            if (string.IsNullOrEmpty(SDKClient.Instance.property.CurrentAccount.token))
-            {
-                var res = WebAPICallBack.Getfuck();
-                SDKClient.Instance.property.CurrentAccount.token = res.token;
-
-                logger.Error($"获取token：token:{res.token}");
-            }
-            //获取二维码
-            var server = Util.Tools.QrCode.QrCodeFactory.Create(property.CurrentAccount.qrCodePath);
-            var response = WebAPICallBack.GetQrCode(Id, userOrgroup);
-            if (response.success)
-            {
-                return server.Size(Util.Tools.QrCode.QrSize.Middle).Save(response.qrCode);
-            }
-            else
-            {
-                logger.Error($"获取二维码错误：imei:{property.CurrentAccount.imei},token:{property.CurrentAccount.token},signature:{Util.Helpers.Encrypt.Md5By32(property.CurrentAccount.lastlastLoginTime.Value.Ticks + ProtocolBase.ImLinkSignUri)},timeStamp:{property.CurrentAccount.lastlastLoginTime.Value.Ticks}，code:{response.code}");
-                logger.Error($"获取二维码错误：{response.error}，code:{response.code}");
-                return null;
-            }
-        }
-        public static string GetLoginQrCodeImg(string session)
-        {
-
-            //获取二维码
-            var server = Util.Tools.QrCode.QrCodeFactory.Create(SDKProperty.QrCodePath);
-
-            return server.Size(Util.Tools.QrCode.QrSize.Middle).Save(session);
-
-        }
-        public string GetLoginQRCode()
-        {
-            GetLoginQRCodePackage package = new GetLoginQRCodePackage();
-            package.data = new GetLoginQRCodePackage.Data();
-
-            package.id = SDKProperty.RNGId;
-            package.Send(ec);
-            return package.id;
-        }
-        public string QuickLogonMsg()
-        {
-            PCAutoLoginApplyPackage package = new PCAutoLoginApplyPackage();
-            package.data = new PCAutoLoginApplyPackage.Data();
-            package.data.token = _token;
-            package.id = SDKProperty.RNGId;
-            package.Send(ec);
-            return package.id;
-        }
+      
 
         /// <summary>
         /// 扫描最新版本

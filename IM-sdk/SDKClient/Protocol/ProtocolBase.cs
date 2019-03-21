@@ -10,11 +10,11 @@ namespace SDKClient.Protocol
     {
 
 #if CHECK
-        //public const string QrLoginIP = "192.168.4.22";
+        //public const string QrLoginIP = "ltim.xxx.com";
         public const string QrLoginIP = "ltim.xxx.com";
         public const int QrLoginPort = 18020;
 
-        //public const string IMIP = "192.168.10.223 ";
+        //public const string IMIP = "ltim.xxx.com";
         public const string IMIP = "ltim.xxx.com";
 #if CUSTOMSERVER
         public const int IMPort = 18010;
@@ -35,15 +35,15 @@ namespace SDKClient.Protocol
         public static string DownloadFileWithResume = BaseDownLoadFile+ "/api/" + SDKClient.Instance.property.CurrentAccount.httpVersion+"/FileOperator/Download?fileCode=";
         public static string downLoadUpdateFile = BaseFileURL + "/api/" + SDKClient.Instance.property.CurrentAccount.httpVersion+"/Version/GetPcSubUpgradeFile";
 #elif DEBUG
-        public const string QrLoginIP = "192.168.4.21";
+        public const string QrLoginIP = "ltim.xxx.com";
         public const int QrLoginPort = 8399;
-        
+
 #if CUSTOMSERVER
-        public const string IMIP = "192.168.4.26";
+        public const string IMIP = "ltim.xxx.com";
         public const int IMPort = 2018;
 
 #else
-        public const string IMIP = "192.168.4.26";
+        public const string IMIP = "ltim.xxx.com";
         public const int IMPort = 2018;
 #endif
 
@@ -58,11 +58,11 @@ namespace SDKClient.Protocol
         public const string downLoadUpdateFile = "http://192.168.4.24:8090/api/Version/GetPcSubUpgradeFile";
        
 #elif HUIDU
-        // public const string QrLoginIP = "14.17.113.145";
+      
         public const int IMPort = 18000;
         public const string QrLoginIP = "otim.xxx.com";
         public const int QrLoginPort = 18020;
-        // public const string IMIP = "14.17.113.145";
+ 
         public const string IMIP = "otim.xxx.com";
         public const string BaseURL = "https://otapi.xxx.com/webapi/";
         public const string BaseFileURL = "https://otfile.xxx.com";
@@ -80,13 +80,13 @@ namespace SDKClient.Protocol
         public const string BaseFileURL = "https://file.xxx.com";
         public const string MJDURL = "https://api.xxx.com/mjd";
         public const string BaseDownLoadFile = "https://cdn.xxx.com";
-        // public const string QrLoginIP = "14.17.113.145";
+    
         public const string QrLoginIP = "im.xxx.com";
         public const int QrLoginPort = 18020;
 
 
 #if CUSTOMSERVER
-        //public const string IMIP = "xxx.xx.com";
+     
         public const string IMIP = "im.xxx.com"; 
         public const int IMPort = 18010;
 #else

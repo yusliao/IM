@@ -139,8 +139,10 @@
   <ItemGroup>
     <Compile Include="Command\CustomOption\CSSyncMsgStatus_cmd.cs" />
     <Compile Include="Command\CustomOption\CustomExchange_cmd.cs" />
+    <Compile Include="Controllers\GroupController.cs" />
     <Compile Include="Controllers\MessageController.cs" />
     <Compile Include="Controllers\OffLineMsgController.cs" />
+    <Compile Include="Controllers\QRController.cs" />
     <Compile Include="Controllers\ResourceController.cs" />
     <Compile Include="DAL\DALResourceManifestHelper.cs" />
     <Compile Include="DB\OffLineMsgTask.cs" />
