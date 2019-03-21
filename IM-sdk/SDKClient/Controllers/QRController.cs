@@ -23,7 +23,7 @@ namespace SDKClient.Controllers
         {
             if (string.IsNullOrEmpty(SDKClient.Instance.property.CurrentAccount.token))
             {
-                var res = WebAPICallBack.Getfuck();
+                var res = WebAPICallBack.GetQrCodeImg();
                 SDKClient.Instance.property.CurrentAccount.token = res.token;
 
                 logger.Error($"获取token：token:{res.token}");
