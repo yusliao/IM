@@ -374,7 +374,7 @@ namespace SDKClient.Controllers
                         errorState = ErrorState.Cancel;
                         break;
                     }
-
+                    fs.Seek((i - 1) * blocklen, SeekOrigin.Begin);
                     byte[] buff = new byte[blocklen];
                     int len = fs.Read(buff, 0, buff.Length);
                     if (len == blocklen)
