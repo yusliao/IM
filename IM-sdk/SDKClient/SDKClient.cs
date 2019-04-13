@@ -36,21 +36,19 @@ namespace SDKClient
     public class SDKClient
     {
         [ImportMany(typeof(CommandBase))]
-        private IEnumerable<CommandBase> CommmandSet { get; set; }  //命令集合
+        internal IEnumerable<CommandBase> CommmandSet { get; set; }  //命令集合
         [ImportMany(typeof(Util.Dependency.ConfigBase))]
         private IEnumerable<Util.Dependency.ConfigBase> EntityConfigs { get; set; }
         internal  EasyClient<PackageInfo> ec = new EasyClient<PackageInfo>();//通讯接口对象
 
-        internal static Util.Logs.ILog logger = Util.Logs.Log.GetLog();//日志对象
+        internal static Util.Logs.ILog logger = Util.Logs.Log.GetLog(typeof(SDKClient));//日志对象
         public event EventHandler<PackageInfo> NewDataRecv; //转发服务端数据
         public event EventHandler<P2PPackage> P2PDataRecv; //p2p消息处理
         public event EventHandler<OfflineMessageContext> OffLineMessageEventHandle; //转发离线聊天消息
-                                                                                    
        
         private static bool needStop = false;
         public readonly SDKProperty property = new SDKProperty();//SDK挂载的属性集对象
         public static readonly SDKClient Instance  = new SDKClient();
-
         
         //心跳定时器
         public System.Threading.Timer timer = null;
@@ -266,7 +264,6 @@ namespace SDKClient
             ec.Closed += ec_Closed;
         }
 
-
         void MyComposePart()
         {
             var catalog = new AssemblyCatalog(Assembly.GetExecutingAssembly());
@@ -288,13 +285,12 @@ namespace SDKClient
             StartReConn();
         }
         /// <summary>
-        /// 重连
+        /// 重连，分QR服务器重连和IM服务器重连，通过property.State识别
         /// </summary>
         public async void StartReConn()
         {
             if (!needStop && property.RaiseConnEvent)
             {
-
                 //没有开始连接，发送连接请求,过滤掉重复请求
                 if (System.Threading.Interlocked.CompareExchange(ref property.ConnState, 1, 0) == 0)
                 {
@@ -313,10 +309,8 @@ namespace SDKClient
                         else
                         {
                             property.remotePoint = new System.Net.IPEndPoint(property.QrServerIP, ProtocolBase.QrLoginPort);
-
                         }
                     }
-
                     logger.Info($"开始重连: {property.remotePoint.ToString()}");
                     try
                     {
@@ -341,11 +335,11 @@ namespace SDKClient
                         property.RaiseConnEvent = true;
                     }
                 }
-                
-
+             
             }
 
         }
+       
         /// <summary>
         /// socket已连接
         /// </summary>
@@ -353,7 +347,6 @@ namespace SDKClient
         /// <param name="e"></param>
         void ec_Connected(object sender, EventArgs e)
         {
-            //   System.Threading.Interlocked.Exchange(ref property.ConnState, 0);
             logger.Info("连接成功");
 
             var obj = sender as EasyClientBase;
@@ -371,8 +364,8 @@ namespace SDKClient
                 }
 
             }
-
             SendConn();
+
             if (timer == null)
             {
                 timer = new System.Threading.Timer(o =>
@@ -382,10 +375,7 @@ namespace SDKClient
                         if (SDKClient.Instance.property.RaiseConnEvent)
                         {
                             OnSendCommand(new HeartMsgPackage());
-                            //CommandBase.SendHeart(ec);
-
                         }
-
 
                         timer?.Change(30 * 1000, System.Threading.Timeout.Infinite);
 
@@ -413,10 +403,6 @@ namespace SDKClient
         void ec_Error(object sender, SuperSocket.ClientEngine.ErrorEventArgs e)
         {
             logger.Error($"{e.Exception.Message}");
-
-            //  StartReConn();
-
-
         }
         /// <summary>
         /// 开始连接
@@ -482,12 +468,10 @@ namespace SDKClient
             if (property.State > ServerState.NotStarted)
             {
                 property.RaiseConnEvent = false;
-#if DEBUG
-                property.IMServerIP = IPAddress.Parse(ProtocolBase.IMIP);
-#else
+
                 IPHostEntry iPHostEntry = Dns.GetHostEntry(ProtocolBase.IMIP);
                 property.IMServerIP = iPHostEntry.AddressList[0];
-#endif
+
                 property.remotePoint = new IPEndPoint(property.IMServerIP, ProtocolBase.IMPort);
             }
             else//扫码连接阶段
@@ -508,6 +492,7 @@ namespace SDKClient
             var result = await ec.ConnectAsync(property.remotePoint);
             return result;
         }
+
         bool _isQuickLogon; //当前登陆
         string _token; //登陆的token
         /// <summary>
@@ -524,6 +509,7 @@ namespace SDKClient
             {
                 IPHostEntry iPHostEntry = Dns.GetHostEntry(ProtocolBase.QrLoginIP);
                 property.QrServerIP = iPHostEntry.AddressList[0];
+
             }
             catch (Exception ex)
             {
@@ -551,6 +537,7 @@ namespace SDKClient
                 return await CreateConn(iPEndPoint);
             }
         }
+
         /// <summary>
         /// 开始处理聊天消息
         /// </summary>
@@ -558,7 +545,6 @@ namespace SDKClient
         {
             property.CanHandleMsg = 2;
             logger.Info("CanHandleMsg 值修改为:2");
-
         }
         /// <summary>
         /// 关闭连接
@@ -566,7 +552,7 @@ namespace SDKClient
         /// <returns></returns>
         public async Task<bool> StopAsync()
         {
-            logger.Error($"停止通讯-{property.CurrentAccount.Session}");
+            logger.Info($"停止通讯-{property.CurrentAccount.Session}");
             needStop = true;
             return await ec.Close();
 
@@ -580,8 +566,6 @@ namespace SDKClient
         /// <param name="e"></param>
         private void Ec_NewPackageReceived(object sender, PackageEventArgs<PackageInfo> e)
         {
-            //string str = Util.Helpers.Json.ToJson(e.Package);
-            //networkMsgRecv?.BeginInvoke(this,str,null,null);
 
             if (e.Package.apiId == ProtocolBase.HeartMsgCode || e.Package.apiId == ProtocolBase.NoHandlePackageCode)
                 return;
@@ -663,7 +647,7 @@ namespace SDKClient
                 receiverId = packageInfo.to.ToInt(),
                 senderId = packageInfo.from.ToInt()
             };
-            WebAPICallBack.AddMsgFaceBack(errorPackage);
+            Task.Run(() => WebAPICallBack.SendErrorToCloud(errorPackage));
         }
 
         internal void OnNewDataRecv(PackageInfo info)
@@ -697,81 +681,20 @@ namespace SDKClient
             }
             else if (_isQuickLogon)
             {
-                QuickLogonMsg();
+                QRController.QuickLogonMsg();
             }
             else
-                GetLoginQRCode();
+                QRController.GetLoginQRCode();
         }
+
      
        
+
+
+      
+ 
         #region 公开的功能
   
-        /// <summary>
-        /// 获取当前用户的登录信息
-        /// </summary>
-        /// <returns></returns>
-        public historyAccountDB GetAccount()
-        {
-            var a = Util.Helpers.Async.Run(async () => await DAL.DALAccount.GetAccount());
-            return a;
-        }
-
-        /// <summary>
-        /// 获取二维码图片
-        /// </summary>
-        /// <param name="Id">个人或者群组编号</param>
-        /// <param name="userOrgroup">1:个人；2：群</param>
-        /// <returns></returns>
-        public string GetQrCodeImg(string Id, string userOrgroup)
-        {
-            if (string.IsNullOrEmpty(SDKClient.Instance.property.CurrentAccount.token))
-            {
-                var res = WebAPICallBack.GetQrCodeImg();
-                SDKClient.Instance.property.CurrentAccount.token = res.token;
-
-                logger.Error($"获取token：token:{res.token}");
-            }
-            //获取二维码
-            var server = Util.Tools.QrCode.QrCodeFactory.Create(property.CurrentAccount.qrCodePath);
-            var response = WebAPICallBack.GetQrCode(Id, userOrgroup);
-            if (response.success)
-            {
-                return server.Size(Util.Tools.QrCode.QrSize.Middle).Save(response.qrCode);
-            }
-            else
-            {
-                logger.Error($"获取二维码错误：imei:{property.CurrentAccount.imei},token:{property.CurrentAccount.token},signature:{Util.Helpers.Encrypt.Md5By32(property.CurrentAccount.lastlastLoginTime.Value.Ticks + ProtocolBase.ImLinkSignUri)},timeStamp:{property.CurrentAccount.lastlastLoginTime.Value.Ticks}，code:{response.code}");
-                logger.Error($"获取二维码错误：{response.error}，code:{response.code}");
-                return null;
-            }
-        }
-        public static string GetLoginQrCodeImg(string session)
-        {
-
-            //获取二维码
-            var server = Util.Tools.QrCode.QrCodeFactory.Create(SDKProperty.QrCodePath);
-
-            return server.Size(Util.Tools.QrCode.QrSize.Middle).Save(session);
-
-        }
-        public string GetLoginQRCode()
-        {
-            GetLoginQRCodePackage package = new GetLoginQRCodePackage();
-            package.data = new GetLoginQRCodePackage.Data();
-
-            package.id = SDKProperty.RNGId;
-            package.Send(ec);
-            return package.id;
-        }
-        public string QuickLogonMsg()
-        {
-            PCAutoLoginApplyPackage package = new PCAutoLoginApplyPackage();
-            package.data = new PCAutoLoginApplyPackage.Data();
-            package.data.token = _token;
-            package.id = SDKProperty.RNGId;
-            package.Send(ec);
-            return package.id;
-        }
 
         /// <summary>
         /// 扫描最新版本
@@ -1587,55 +1510,11 @@ namespace SDKClient
             return infrastructureContext;
 
         }
-        /// <summary>
-        /// 使用TaskCompletionSource类型处理Task，防止UI与后台线程死锁
-        /// </summary>
-        /// <typeparam name="T"></typeparam>
-        /// <param name="dataProcess"></param>
-        /// <returns></returns>
-        private async Task<T> GetData<T>(Func<Task<T>> dataProcess)
-        {
-            TaskCompletionSource<T> task = new TaskCompletionSource<T>();
+        #endregion
 
-            TaskCompletionSource<T> ComposeData()
-            {
-                TaskCompletionSource<T> ts = new TaskCompletionSource<T>();
-                Task.Run(async () =>
-                {
-                    var lst = await dataProcess();
-                    ts.SetResult(lst);
-                    return ts;
-                });
-                return ts;
 
-            }
-            task = ComposeData();
 
-            return await task.Task.ConfigureAwait(false);
-        }
-        private async Task<T> GetData<T>(Func<T> dataProcess)
-        {
-            TaskCompletionSource<T> task = new TaskCompletionSource<T>();
 
-            TaskCompletionSource<T> ComposeData()
-            {
-                TaskCompletionSource<T> ts = new TaskCompletionSource<T>();
-                Task.Run(() =>
-                {
-                    var lst = dataProcess();
-                    ts.SetResult(lst);
-                    return ts;
-                });
-                return ts;
-
-            }
-            task = ComposeData();
-
-            return await task.Task.ConfigureAwait(false);
-        }
-       
-
-#endregion
 
 
     }

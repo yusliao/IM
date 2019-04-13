@@ -173,9 +173,8 @@ namespace SDKClient.WebAPI
         /// </summary>
         /// <param name="request"></param>
         /// <returns></returns>
-        public static WebResponse AddMsgFaceBack(ErrorPackage request)
+        public static WebResponse SendErrorToCloud(ErrorPackage request)
         {
-
             try
             {
                 var response = new Util.Webs.Clients.WebClient().Post(ProtocolBase.AddMsgFaceBack)
@@ -194,12 +193,12 @@ namespace SDKClient.WebAPI
               .ContentType(Util.Webs.Clients.HttpContentType.Json)
               .OnFail((s, c) => SDKClient.logger.Error($"AddMsgFaceBack 调用失败: {s},错误码：{c.Value()}"))
               .ResultFromJson<WebResponse>();
-                SDKClient.logger.Info($"AddMsgFaceBack: {Util.Helpers.Json.ToJson(response)}");
+                SDKClient.logger.Info($"SendErrorToCloud: {Util.Helpers.Json.ToJson(response)}");
                 return response;
             }
             catch (Exception ex)
             {
-                SDKClient.logger.Error($"AddMsgFaceBack: {ex.Message}");
+                SDKClient.logger.Error($"SendErrorToCloud: {ex.Message}");
                 return null;
             }
 

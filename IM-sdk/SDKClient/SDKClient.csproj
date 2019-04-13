@@ -135,6 +135,7 @@
   <ItemGroup>
     <Compile Include="Controllers\MessageController.cs" />
     <Compile Include="Controllers\OffLineMsgController.cs" />
+    <Compile Include="Controllers\QRController.cs" />
     <Compile Include="Controllers\ResourceController.cs" />
     <Compile Include="DAL\DALResourceManifestHelper.cs" />
     <Compile Include="DB\OffLineMsgTask.cs" />

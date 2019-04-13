@@ -89,7 +89,7 @@ namespace SDKClient
         /// </summary>
         public EndPoint remotePoint { get; set; }
         /// <summary>
-        /// 开启重连信号
+        /// 重连信号,true说明可以进行重连，false 不可以进行重连
         /// </summary>
         public bool RaiseConnEvent { get; set; }
         public userType CurUserType { get; set; }
@@ -161,7 +161,7 @@ namespace SDKClient
         }
 
         /// <summary>
-        /// 连接状态0：重置请求;1：正在请求
+        /// 重连状态   0表示未开始连接;1表示正在连接
         /// </summary>
         public int ConnState = 0;
         /// <summary>
@@ -529,15 +529,15 @@ namespace SDKClient
 
     internal class ServerStateConst
     {
-        public const int NotInitialized = 0;
+        public const int NotInitialized = 0;//初始状态
 
-        public const int Initializing = 1;
+        public const int Initializing = 1; //QR连接
 
-        public const int NotStarted = 2;
+        public const int NotStarted = 2; //QR连接完毕
 
-        public const int Starting = 3;
+        public const int Starting = 3; //IM服务器连接
 
-        public const int Running = 4;
+        public const int Running = 4; //IM服务器连接成功
 
         public const int Stopping = 5;
     }

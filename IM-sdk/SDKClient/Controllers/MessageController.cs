@@ -420,15 +420,15 @@ namespace SDKClient.Controllers
             Util.Helpers.Async.Run(async () => await DAL.DALMessageHelper.UpdateMsgHidden(msgId));
         }
         /// <summary>
-        /// 变更消息
+        /// 变更消息为通知类型
         /// </summary>
         /// <param name="msgId"></param>
         /// <param name="content">内容</param>
-        /// <param name="messageType"></param>
-        public static void UpdateHistoryMsgContent(string msgId, string content, SDKProperty.MessageType messageType = SDKProperty.MessageType.notification)
+        public static void UpdateHistoryMsgToNotification(string msgId, string content)
         {
-            Util.Helpers.Async.Run(async () => await DAL.DALMessageHelper.UpdateMsgContent(msgId, content, messageType));
+            Util.Helpers.Async.Run(async () => await DAL.DALMessageHelper.UpdateMsgContent(msgId, content, SDKProperty.MessageType.notification));
         }
+
         public static string SendOnlineFile(int to, string fileFullName, Action<long> SetProgressSize, Action<(int isSuccess, string imgMD5, string imgId, NotificatonPackage notifyPackage)> SendComplete, Action<long> ProgressChanged,
           System.Threading.CancellationToken? cancellationToken = null)
         {
@@ -510,6 +510,7 @@ namespace SDKClient.Controllers
             }
 
         }
+
         private static string SendOnlineFileMessage(string path, string to, string resourceId, long fileSize, string ip, int port, SDKProperty.SessionType sessionType = SessionType.CommonChat)
         {
             string id;
@@ -546,6 +547,8 @@ namespace SDKClient.Controllers
             return id;
         }
 
+        
+        
     }
 
 }
