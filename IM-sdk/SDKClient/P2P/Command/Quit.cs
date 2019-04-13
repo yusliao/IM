@@ -25,7 +25,7 @@ namespace SDKClient.P2P.Command
             {
 
                 P2PClient p2PHelper = P2PClient.FileCache[id];
-                p2PHelper.CancelSend();
+                p2PHelper.OnQuit();
                
                 //P2PPackage package = new P2PPackage()
                 //{

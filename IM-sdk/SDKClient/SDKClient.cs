@@ -715,25 +715,6 @@ namespace SDKClient
             var a = Util.Helpers.Async.Run(async () => await DAL.DALAccount.GetAccount());
             return a;
         }
-        
-      
-
-     
-
-       
-        
-
-
-
-
-       
-      
-        
-       
-       
-     
-      
-       
 
         /// <summary>
         /// 获取二维码图片
@@ -835,19 +816,7 @@ namespace SDKClient
             return (detail.IsSubUpgrade, newVersion);
         }
 
-        /// <summary>
-        /// 获取短信验证码
-        /// </summary>
-        /// <param name="userMobile"></param>
-        /// <returns></returns>
-        public async Task<string> GetSmsMessage(string userMobile)
-        {
-            return await new Util.Webs.Clients.WebClient().Post(Protocol.ProtocolBase.SmsUri)
-                .Data("userMobile", userMobile)
-                .ContentType(Util.Webs.Clients.HttpContentType.Json)
-                .ResultAsync();
-
-        }
+       
 
 
 #region CURD DB_historyAccount

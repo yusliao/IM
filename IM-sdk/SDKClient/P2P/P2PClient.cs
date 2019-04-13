@@ -24,7 +24,7 @@ namespace SDKClient.P2P
         /// </summary>
         internal static Dictionary<string, P2PClient> FileCache { get; set; } = new Dictionary<string, P2PClient>();
         private static NLog.Logger Logger  = NLog.LogManager.GetCurrentClassLogger();
-        TcpClient tcpClient = null;
+        TcpClient tcpClient = null;//接收端连接对象
         /// <summary>
         /// 文件发送方
         /// </summary>
@@ -49,7 +49,10 @@ namespace SDKClient.P2P
         /// </summary>
         public string FileName { get; set; }
 
-       // public event EventHandler<BinaryRequestInfo> NewDataRecv; //转发服务端数据
+       /// <summary>
+       /// 发送文件内容
+       /// </summary>
+       /// <param name="session">会话对象</param>
         public  void SendBody(CustomProtocolSession session)
         {
             Logger.Info($"在线文件开始发送:file:{FileName}，msgid:{MsgId}");
@@ -60,7 +63,6 @@ namespace SDKClient.P2P
                 string content = $"源文件被修改或删除，您取消了\"{Path.GetFileName(FileName)}\"({FileSize.GetFileSizeString()})的发送，文件传输失败。";
                 NotificatonPackage notificaton = new NotificatonPackage()
                 {
-
                     Content = content,
                     ErrorCode = SDKProperty.ErrorState.AppError,
                     IsSuccess = false,
@@ -70,7 +72,7 @@ namespace SDKClient.P2P
                     FileName = FileName,
                     Error = "文件不存在"
                 };
-                Util.Helpers.Async.Run(async () => await DAL.DALMessageHelper.UpdateMsgContent(MsgId, content, SDKProperty.MessageType.notification, SDKProperty.MessageState.cancel));
+                
                 this.SendComplete?.Invoke((0, MD5, MsgId, notificaton));
                 return;
             }
@@ -98,17 +100,17 @@ namespace SDKClient.P2P
                                 }
 
                                 byte[] buff = new byte[4096];
-                                int len = fs.Read(buff, 0, 4096);
+                                int len = fs.Read(buff, 0, 4096);//计算出内容长度
                                 
                                 byte[] bodylen = BitConverter.GetBytes(len);
                                 if (!IsCancelled)
                                 {
-                                    session.Send(bodylen, 0, 4);
+                                    session.Send(bodylen, 0, 4);//先传输长度信息
 
-                                    session.Send(buff, 0, len);
+                                    session.Send(buff, 0, len);//再传输内容信息
                                 }
                                 index += len;
-                                this.ProgressChanged?.Invoke(index);
+                                this.ProgressChanged?.Invoke(index);//进度条步进
                                 if (index == FileSize)
                                 {
 
@@ -125,7 +127,7 @@ namespace SDKClient.P2P
                                         FileName = FileName
                                     };
                                     int i = Util.Helpers.Async.Run(async () => await SDKProperty.SQLiteConn.ExecuteAsync($"update messageDB set fileState={(int)SDKProperty.ResourceState.IsCompleted} where msgId='{MsgId}'"));
-                                    Util.Helpers.Async.Run(async () => await DAL.DALMessageHelper.SendMsgtoDB(notificaton));
+                                  
 
                                     this.SendComplete?.Invoke((1, MD5, MsgId, notificaton));
 
@@ -149,7 +151,7 @@ namespace SDKClient.P2P
                                     FileSize = FileSize,
                                     FileName = FileName
                                 };
-                                Util.Helpers.Async.Run(async () => await DAL.DALMessageHelper.UpdateMsgContent(MsgId, content, SDKProperty.MessageType.notification, SDKProperty.MessageState.cancel));
+                               
                                 this.SendComplete?.Invoke((0, MD5, MsgId, notificaton));
                                 break;
                             }
@@ -158,18 +160,16 @@ namespace SDKClient.P2P
                         {
                             Logger.Info($"在线文件取消发送:file:{FileName}，msgid:{MsgId}");
                             string content = $"您取消了\"{Path.GetFileName(FileName)}\"({FileSize.GetFileSizeString()})的发送，文件传输失败。";
-                            Util.Helpers.Async.Run(async () => await DAL.DALMessageHelper.UpdateMsgContent(MsgId, content, SDKProperty.MessageType.notification, SDKProperty.MessageState.cancel));
-                            SendQuit(session);
+                          
+                            SendQuit(session);//通知对方，放弃传输
                             break;
                         }
                     }
-                   
-
 
                 }
             }
             
-            catch(SocketException ex)
+            catch(SocketException)
             {
                 Logger.Error($"在线文件发送失败:file:{FileName}，msgid:{MsgId}");
                 string content = $"对方取消了\"{Path.GetFileName(FileName)}\"({FileSize.GetFileSizeString()})的发送，文件传输失败。";
@@ -184,7 +184,7 @@ namespace SDKClient.P2P
                     FileSize = FileSize,
                     FileName = FileName
                 };
-                Util.Helpers.Async.Run(async () => await DAL.DALMessageHelper.UpdateMsgContent(MsgId, content, SDKProperty.MessageType.notification, SDKProperty.MessageState.cancel));
+              
                 this.SendComplete?.Invoke((0, MD5, MsgId, notificaton));
             }
             catch (Exception ex)
@@ -203,7 +203,7 @@ namespace SDKClient.P2P
                     FileName = FileName,
                     Error = ex.Message
                 };
-                Util.Helpers.Async.Run(async () => await DAL.DALMessageHelper.UpdateMsgContent(MsgId, content, SDKProperty.MessageType.notification, SDKProperty.MessageState.cancel));
+              
                 this.SendComplete?.Invoke((0, MD5, MsgId, notificaton));
             }
 
@@ -236,7 +236,7 @@ namespace SDKClient.P2P
                     FileSize = FileSize,
                     FileName = FileName
                 };
-                Util.Helpers.Async.Run(async () => await DAL.DALMessageHelper.UpdateMsgContent(MsgId, content, SDKProperty.MessageType.notification, SDKProperty.MessageState.cancel));
+               
                 this.SendComplete?.Invoke((0, MD5, MsgId, notificaton));
             }
 
@@ -268,9 +268,9 @@ namespace SDKClient.P2P
 
         }
         /// <summary>
-        /// 收到接收端取消接收命令，中止发送
+        /// 处理QUIT命令响应任务
         /// </summary>
-        public void CancelSend()
+        public void OnQuit()
         {
             IsCancelled = true;
             string content = $"对方取消了\"{Path.GetFileName(FileName)}\"({FileSize.GetFileSizeString()})的接收，文件传输失败。";
@@ -287,7 +287,7 @@ namespace SDKClient.P2P
                 FileName = FileName
             };
             this.SendComplete?.Invoke((0, MD5, MsgId, notificaton));
-            Util.Helpers.Async.Run(async () => await DAL.DALMessageHelper.UpdateMsgContent(MsgId, content, SDKProperty.MessageType.notification, SDKProperty.MessageState.cancel));
+           
         }
         /// <summary>
         /// 发送文件头请求
@@ -326,7 +326,10 @@ namespace SDKClient.P2P
             }
 
         }
-        
+        /// <summary>
+        /// 接收方操作，建立连接
+        /// </summary>
+        /// <returns></returns>
         public bool TryConnect()
         {
             if(tcpClient==null)
@@ -345,7 +348,7 @@ namespace SDKClient.P2P
             {
                 Logger.Error($"在线文件连接建立失败:file:{FileName}，msgid:{MsgId}");
                 string content = $"您取消了\"{Path.GetFileName(FileName)}\"({FileSize.GetFileSizeString()})的接收，文件传输失败。";
-                Util.Helpers.Async.Run(async () => await DAL.DALMessageHelper.UpdateMsgContent(MsgId, content, SDKProperty.MessageType.notification, SDKProperty.MessageState.cancel));
+             
                 return false;
             }
             return tcpClient.Connected;
@@ -379,12 +382,11 @@ namespace SDKClient.P2P
                                 };
                                
                                 string content = FileName;
-                                int i = Util.Helpers.Async.Run(async () => await SDKProperty.SQLiteConn.ExecuteAsync($"update messageDB set fileState={(int)SDKProperty.ResourceState.IsCompleted},content='{FileName}',fileName='{FileName}' where msgId='{MsgId}'"));
-                               
-                                this.SendComplete?.Invoke((1, MD5, MsgId, notificaton));
                                 fs.Flush();
+                                this.SendComplete?.Invoke((1, MD5, MsgId, notificaton));
+                                
                             }
-                            else
+                            else 
                             {
                                 string content = $"您取消了\"{Path.GetFileName(FileName)}\"({FileSize.GetFileSizeString()})的接收，文件传输失败。";
                                 Util.Helpers.Async.Run(async () => await DAL.DALMessageHelper.UpdateMsgContent(MsgId, content, SDKProperty.MessageType.notification, SDKProperty.MessageState.cancel));
@@ -402,14 +404,14 @@ namespace SDKClient.P2P
 
                                 Logger.Info($"您取消了在线文件的接收:file:{FileName}，msgid:{MsgId}");
                                 IsCancelled = true;
-                                Util.Helpers.Async.Run(async () => await DAL.DALMessageHelper.UpdateMsgContent(MsgId, content, SDKProperty.MessageType.notification, SDKProperty.MessageState.cancel));
+                             
                                 this.SendComplete?.Invoke((0, MD5, MsgId, notificaton));
 
                             }
                             break;
                         }
                         int curCount = 0;
-                        if (!foundHeader)
+                        if (!foundHeader)//获取协议头
                         {
                             byte[] head = new byte[8];
                             int index = 0;
@@ -429,7 +431,7 @@ namespace SDKClient.P2P
                                                 curCount = BitConverter.ToInt32(head, 4);
                                                 break;
                                             }
-                                            else if (h.ToLower() == "quit")
+                                            else if (h.ToLower() == "quit")//收到发送方的取消发送命令
                                             {
                                                 IsCancelled = true;
                                                 //P2PPackage package = new P2PPackage()
@@ -475,7 +477,7 @@ namespace SDKClient.P2P
                                     Logger.Info($"您取消了在线文件的接收:file:{FileName}，msgid:{MsgId}");
                                     IsCancelled = true;
                                     string content = $"您取消了\"{Path.GetFileName(FileName)}\"({FileSize.GetFileSizeString()})的接收，文件传输失败。";
-                                    Util.Helpers.Async.Run(async () => await DAL.DALMessageHelper.UpdateMsgContent(MsgId, content, SDKProperty.MessageType.notification, SDKProperty.MessageState.cancel));
+                             
                                     SendQuit();
                                 }
 
@@ -512,7 +514,7 @@ namespace SDKClient.P2P
                                 Logger.Info($"您取消了在线文件的接收:file:{FileName}，msgid:{MsgId}");
                                 IsCancelled = true;
                                 string content = $"您取消了\"{Path.GetFileName(FileName)}\"({FileSize.GetFileSizeString()})的接收，文件传输失败。";
-                                Util.Helpers.Async.Run(async () => await DAL.DALMessageHelper.UpdateMsgContent(MsgId, content, SDKProperty.MessageType.notification, SDKProperty.MessageState.cancel));
+                             
                                 SendQuit();
                             }
                         }
